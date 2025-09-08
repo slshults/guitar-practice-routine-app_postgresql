@@ -404,4 +404,4 @@ Special thanks to the entire open source community for building the tools and li
 
 **Happy practicing!** 🎵
 
-*If you find this helpful, please consider starring the repository and sharing it with other guitar players.*
+*If you find this helpful, please consider starring the repository and sharing it with other guitar players.*# guitar-practice-routine-app_postgresql
