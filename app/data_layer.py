@@ -80,15 +80,23 @@ class DataLayer:
     
     def update_item(self, item_id: int, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         if self.mode == 'postgres':
+            # Convert ItemID to database primary key
+            db_id = self._get_db_id_from_item_id(item_id)
+            if db_id is None:
+                return None
             service = ItemService()
-            return service.update_item(item_id, item_data)
+            return service.update_item(db_id, item_data)
         else:
             return sheets.update_item(item_id, item_data)
     
     def delete_item(self, item_id: int) -> bool:
         if self.mode == 'postgres':
+            # Convert ItemID to database primary key
+            db_id = self._get_db_id_from_item_id(item_id)
+            if db_id is None:
+                return False
             service = ItemService()
-            return service.delete_item(item_id)
+            return service.delete_item(db_id)
         else:
             return sheets.delete_item(item_id)
     
@@ -98,6 +106,42 @@ class DataLayer:
             return service.update_items_order(items)
         else:
             return sheets.update_items_order(items)
+    
+    def get_item_notes(self, item_id: int) -> Dict[str, Any]:
+        """Get notes for a specific item."""
+        if self.mode == 'postgres':
+            service = ItemService()
+            # Convert Google Sheets ItemID to database ID
+            db_id = self._get_db_id_from_item_id(item_id)
+            if not db_id:
+                return {'error': 'Item not found'}
+            
+            item = service.get_item_by_id(db_id)
+            if not item:
+                return {'error': 'Item not found'}
+            
+            return {'notes': item.get('D', '')}  # Column D is notes
+        else:
+            # Use sheets implementation
+            return sheets.get_item_notes(item_id)
+    
+    def save_item_notes(self, item_id: int, notes: str) -> Dict[str, Any]:
+        """Save notes for a specific item.""" 
+        if self.mode == 'postgres':
+            service = ItemService()
+            # Convert Google Sheets ItemID to database ID
+            db_id = self._get_db_id_from_item_id(item_id)
+            if not db_id:
+                return {'error': 'Item not found'}
+            
+            success = service.update_item_notes(db_id, notes)
+            if success:
+                return {'success': True}
+            else:
+                return {'error': 'Failed to save notes'}
+        else:
+            # Use sheets implementation
+            return sheets.save_item_notes(item_id, notes)
     
     # Chord Charts API
     def get_chord_charts_for_item(self, item_id: int) -> List[Dict[str, Any]]:
@@ -155,6 +199,80 @@ class DataLayer:
         else:
             return sheets.get_chord_charts_for_item(item_id)
     
+    def batch_get_chord_charts(self, item_ids: List[int]) -> Dict[str, List[Dict[str, Any]]]:
+        """Get chord charts for multiple items in a single operation."""
+        if self.mode == 'postgres':
+            from sqlalchemy import text
+            from app.database import DatabaseTransaction
+            
+            result = {}
+            
+            with DatabaseTransaction() as db:
+                for item_id in item_ids:
+                    item_id_str = str(item_id)
+                    charts = []
+                    
+                    # Look for exact match first, then comma-separated matches
+                    rows = db.execute(text('''
+                        SELECT chord_id, item_id, title, chord_data, created_at, order_col
+                        FROM chord_charts 
+                        WHERE item_id = :exact_id 
+                           OR item_id LIKE :pattern1 
+                           OR item_id LIKE :pattern2 
+                           OR item_id LIKE :pattern3
+                        ORDER BY order_col
+                    '''), {
+                        'exact_id': item_id_str,
+                        'pattern1': f'{item_id_str},%',  # "107, 61"
+                        'pattern2': f'%, {item_id_str},%',  # "23, 107, 61" 
+                        'pattern3': f'%, {item_id_str}'  # "23, 107"
+                    }).fetchall()
+                    
+                    for row in rows:
+                        chart = {
+                            'id': row[0],
+                            'itemId': item_id,  # Use the requested item_id, not the comma-separated string
+                            'title': row[2],
+                            'createdAt': row[4] if row[4] else '',
+                            'order': row[5]
+                        }
+                        
+                        # Parse chord_data JSON safely
+                        chord_data = row[3]
+                        if isinstance(chord_data, str):
+                            import json
+                            try:
+                                chord_data = json.loads(chord_data)
+                            except json.JSONDecodeError:
+                                chord_data = {}
+                        elif not isinstance(chord_data, dict):
+                            chord_data = {}
+                            
+                        # Add chord data properties
+                        if chord_data:
+                            chart['fingers'] = chord_data.get('fingers', [])
+                            chart['barres'] = chord_data.get('barres', [])
+                            chart['openStrings'] = chord_data.get('openStrings', [])
+                            chart['mutedStrings'] = chord_data.get('mutedStrings', [])
+                            chart['startingFret'] = chord_data.get('startingFret', 1)
+                            chart['numFrets'] = chord_data.get('numFrets', 5)
+                            chart['numStrings'] = chord_data.get('numStrings', 6)
+                            chart['sectionId'] = chord_data.get('sectionId', '')
+                            chart['sectionLabel'] = chord_data.get('sectionLabel', '')
+                            chart['sectionRepeatCount'] = chord_data.get('sectionRepeatCount', '')
+                            chart['hasLineBreakAfter'] = chord_data.get('hasLineBreakAfter', False)
+                            chart['tuning'] = chord_data.get('tuning', 'EADGBE')
+                            chart['capo'] = chord_data.get('capo', 0)
+                        
+                        charts.append(chart)
+                    
+                    # Store charts for this item_id (as string for frontend compatibility)
+                    result[str(item_id)] = charts
+            
+            return result
+        else:
+            return sheets.batch_get_chord_charts(item_ids)
+    
     def add_chord_chart(self, item_id: int, chart_data: Dict[str, Any]) -> Dict[str, Any]:
         if self.mode == 'postgres':
             # Use ItemID as string directly (no conversion needed)
@@ -184,6 +302,21 @@ class DataLayer:
             return service.delete_chord_chart(chart_id)
         else:
             return sheets.delete_chord_chart(chart_id)
+    
+    def batch_delete_chord_charts(self, chord_ids: List[int]) -> Dict[str, Any]:
+        """Delete multiple chord charts by IDs in a single transaction."""
+        if self.mode == 'postgres':
+            from app.repositories.chord_charts import ChordChartRepository
+            with DatabaseTransaction() as db:
+                repo = ChordChartRepository(db)
+                deleted_count = repo.batch_delete(chord_ids)
+                return {
+                    "success": True,
+                    "deleted": chord_ids[:deleted_count],  # IDs that were actually deleted
+                    "deleted_count": deleted_count
+                }
+        else:
+            return sheets.batch_delete_chord_charts(chord_ids)
     
     def update_chord_charts_order(self, item_id: int, chord_charts: List[Dict[str, Any]]) -> bool:
         if self.mode == 'postgres':

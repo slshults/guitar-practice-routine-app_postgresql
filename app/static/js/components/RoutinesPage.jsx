@@ -358,7 +358,7 @@ const RoutinesPage = () => {
       const response = await fetch('/api/routines/active');
       if (!response.ok) throw new Error('Failed to fetch active routine');
       const data = await response.json();
-      const activeId = data.active_id;
+      const activeId = data.A; // Use Google Sheets format (Column A)
       
       if (!activeId) {
         throw new Error('No active routine found');
@@ -377,7 +377,7 @@ const RoutinesPage = () => {
       setActiveRoutineItems(reordered);
       
       // Send update to backend using the active routine ID as sheet name
-      const orderResponse = await fetch(`/api/routines/${activeId}/order`, {
+      const orderResponse = await fetch(`/api/routines/${activeId}/items/order`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(withNewOrder)

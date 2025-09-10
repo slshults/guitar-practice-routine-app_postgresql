@@ -24,7 +24,17 @@ class ItemRepository(BaseRepository):
     def create_from_sheets_format(self, sheets_data: Dict[str, Any]) -> Item:
         """Create item from Google Sheets format data."""
         item_data = self._from_sheets_format(sheets_data)
-        return self.create(**item_data)
+        
+        # Create the item first
+        item = self.create(**item_data)
+        
+        # If item_id is empty, set it to the database ID for compatibility
+        if not item.item_id:
+            item.item_id = str(item.id)
+            self.db.commit()
+            self.db.refresh(item)
+        
+        return item
     
     def update_from_sheets_format(self, item_id: int, sheets_data: Dict[str, Any]) -> Optional[Item]:
         """Update item using Google Sheets format data."""

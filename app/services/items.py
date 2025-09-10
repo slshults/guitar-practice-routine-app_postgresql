@@ -47,8 +47,14 @@ class ItemService(BaseService):
             item_repo = ItemRepository(self.db)
             chord_repo = ChordChartRepository(self.db)
             
-            # Delete associated chord charts first
-            chord_repo.delete_all_for_item(item_id)
+            # Get the item to extract its ItemID string
+            item = item_repo.get_by_id(item_id)
+            if not item:
+                return False
+                
+            # Delete associated chord charts first using ItemID string
+            if item.item_id:
+                chord_repo.delete_all_for_item(item.item_id)
             
             # Delete the item
             return item_repo.delete(item_id)
@@ -100,3 +106,22 @@ class ItemService(BaseService):
             }
         
         return self._execute_with_transaction(_get_stats)
+    
+    def get_item_by_id(self, item_id: int) -> Optional[Dict[str, Any]]:
+        """Get a single item by database ID in Sheets format."""
+        return self.get_item(item_id)  # Reuse existing method
+    
+    def update_item_notes(self, item_id: int, notes: str) -> bool:
+        """Update notes for a specific item."""
+        def _update_notes():
+            repo = ItemRepository(self.db)
+            item = repo.get_by_id(item_id)
+            if not item:
+                return False
+            
+            # Update the notes field
+            item.notes = notes
+            repo.db.commit()
+            return True
+        
+        return self._execute_with_transaction(_update_notes)

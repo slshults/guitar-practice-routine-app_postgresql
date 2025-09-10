@@ -66,6 +66,8 @@ This is a **Guitar Practice Routine App** - a web application that helps guitari
 
 **Note**: This is the PostgreSQL port of the original Google Sheets-based application. We're currently in the process of migrating from Google Sheets API to PostgreSQL for improved performance and more traditional database operations. 
 
+So, when we're fixing bugs, don't try to re-engineer it. Just refer to the code in the sheets version of the app to see how it worked correctly, and correctly port it for this postgres version of the app: https://github.com/slshults/guitar-practice-routine-app_sheets
+
 ## Tech Stack
 
 - **Backend**: Flask (Python) with PostgreSQL database (migrating from Google Sheets API)
@@ -201,6 +203,7 @@ charts = data_layer.get_chord_charts_for_item(item_id)
 - **NO SORTING:** Repository/service layers should not sort data - preserve insertion order
 - **Order Column:** Contains drag-and-drop values with gaps (0,1,2,3,5,6...) - use for display logic, not sorting
 - **Physical Row Preservation:** Database should mirror exact physical sheet row sequence
+- **CommonChords Migration:** Use `migrate_common_chords.py` with rate limiting for all 12,708+ records
 
 ### File Path Handling
 - WSL-friendly path mapping for Windows folders (see `app/routes.py`)
@@ -487,5 +490,57 @@ setChordSections(prev => ({
 2. Verify chord name matching logic is working
 3. Ensure song structure is preserved from tablature
 4. Validate visual analysis descriptions make sense
+
+## Critical PostgreSQL Migration Bug (SOLVED)
+
+### ItemID Mapping Issue in Routine Items
+**Symptom**: Chord charts showing up on wrong songs despite correct titles (e.g., "Should I Stay or Should I Go" title but "My City Was Gone" chords)
+
+**Root Cause**: The `_routine_item_to_sheets_format()` method in `app/repositories/routines.py` was returning database primary keys instead of Google Sheets ItemIDs in Column B.
+
+**The Problem**: 
+- Database ID 106 → ItemID "107" → "Should I Stay or Should I Go"
+- But routine was returning Column B="106" instead of Column B="107"
+- Frontend requests chord charts for ItemID "106" → gets "My City Was Gone" chords
+
+**The Fix**: Modified `_routine_item_to_sheets_format()` to query the Items table and return the actual `item.item_id` string instead of the `routine_item.item_id` integer:
+
+```python
+# Get the actual ItemID string from the Items table
+item = self.db.query(Item).filter(Item.id == routine_item.item_id).first()
+item_id_str = item.item_id if item and item.item_id else str(routine_item.item_id)
+
+return {
+    'A': str(routine_item.id),  # RoutineItem ID
+    'B': item_id_str,          # Google Sheets ItemID (e.g., "107", not 106)
+    'C': str(routine_item.order),  # Order
+    'D': 'TRUE' if routine_item.completed else 'FALSE'  # Completed
+}
+```
+
+**Critical**: Always use Google Sheets ItemIDs for frontend communication, never database primary keys.
+
+## PostgreSQL Migration Debugging Patterns
+
+### API Endpoint Completeness Check
+When implementing API endpoints, always verify BOTH directions of batch operations exist:
+- **`/api/chord-charts/batch`** (POST) - GET chord charts for multiple items
+- **`/api/chord-charts/batch-delete`** (POST) - DELETE multiple chord charts by IDs
+
+**Common Issue**: Frontend may call both endpoints for different purposes. Check sheets version for complete endpoint list.
+
+### Complex Debugging with Task Tool
+For multi-system issues (missing endpoints, data format problems, etc.), use Task tool with general-purpose agent:
+- Provide specific file paths and function names
+- Include "don't re-engineer" reminder and sheets reference link
+- Request detailed technical analysis with fix recommendations
+- Very effective for systematic debugging
+
+### Migration Progress Reference
+See `API_MISMATCH_CHECKLIST.md` in project root for comprehensive comparison between PostgreSQL and sheets versions:
+- Complete endpoint inventory
+- Priority-based action items  
+- Current implementation status
+- Should be updated as features are implemented
 
 Anon, we rock n roll 🙌🤘🎸...

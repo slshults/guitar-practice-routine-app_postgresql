@@ -10,6 +10,19 @@ class ChordChartRepository(BaseRepository):
     def __init__(self, db_session=None):
         super().__init__(ChordChart, db_session)
     
+    def get_by_id(self, id: int) -> Optional[ChordChart]:
+        """Override to use chord_id instead of id."""
+        return self.db.query(ChordChart).filter(ChordChart.chord_id == id).first()
+    
+    def delete(self, id: int) -> bool:
+        """Override to use chord_id instead of id."""
+        instance = self.get_by_id(id)
+        if instance:
+            self.db.delete(instance)
+            self.db.commit()
+            return True
+        return False
+    
     def get_for_item(self, item_id: str) -> List[ChordChart]:
         """Get all chord charts for an item, ordered by order column."""
         return self.db.query(ChordChart).filter(
@@ -26,9 +39,33 @@ class ChordChartRepository(BaseRepository):
         created_charts = []
         try:
             for i, chart_data in enumerate(chord_charts_data):
-                # Handle both direct format and Sheets format
-                if 'title' in chart_data and 'chord_data' in chart_data:
-                    # Direct format
+                # Handle three formats: Frontend format, Direct format, and Sheets format
+                if 'title' in chart_data and 'fingers' in chart_data:
+                    # Frontend format (same as sheets version expected)
+                    # Extract the title and build chord_data from SVGuitar properties
+                    chord_data_obj = {
+                        'fingers': chart_data.get('fingers', []),
+                        'barres': chart_data.get('barres', []),
+                        'tuning': chart_data.get('tuning', 'EADGBE'),
+                        'capo': chart_data.get('capo', 0),
+                        'startingFret': chart_data.get('startingFret', 1),
+                        'numFrets': chart_data.get('numFrets', 5),
+                        'numStrings': chart_data.get('numStrings', 6),
+                        'openStrings': chart_data.get('openStrings', []),
+                        'mutedStrings': chart_data.get('mutedStrings', []),
+                        'sectionId': chart_data.get('sectionId'),
+                        'sectionLabel': chart_data.get('sectionLabel'),
+                        'sectionRepeatCount': chart_data.get('sectionRepeatCount'),
+                        'hasLineBreakAfter': chart_data.get('hasLineBreakAfter', False)
+                    }
+                    chart = ChordChart(
+                        item_id=item_id,
+                        title=chart_data.get('title', f'Chord {i+1}'),
+                        chord_data=chord_data_obj,
+                        order_col=chart_data.get('order', i)
+                    )
+                elif 'title' in chart_data and 'chord_data' in chart_data:
+                    # Direct format (nested chord_data)
                     chart = ChordChart(
                         item_id=item_id,
                         title=chart_data.get('title', f'Chord {i+1}'),
@@ -115,15 +152,35 @@ class ChordChartRepository(BaseRepository):
     
     # Format conversion helpers
     def _to_sheets_format(self, chart: ChordChart) -> Dict[str, Any]:
-        """Convert SQLAlchemy ChordChart to Sheets API format."""
-        return {
-            'A': str(chart.chord_id),     # ChordID
-            'B': str(chart.item_id),      # ItemID
-            'C': chart.title or '',       # Title
-            'D': chart.chord_data or {},  # ChordData (JSON)
-            'E': chart.created_at.isoformat() if chart.created_at else '',  # CreatedAt
-            'F': str(chart.order_col)     # Order
+        """Convert SQLAlchemy ChordChart to frontend API format (flattened)."""
+        # Start with base chart info
+        result = {
+            'id': str(chart.chord_id),     # Frontend uses 'id'
+            'itemId': chart.item_id,       # Frontend uses 'itemId'
+            'title': chart.title or '',    # Title
+            'order': chart.order_col,      # Frontend uses 'order'
+            'createdAt': chart.created_at.isoformat() if chart.created_at else '',
         }
+        
+        # Flatten chord_data properties to top level (matching frontend expectations)
+        chord_data = chart.chord_data or {}
+        result.update({
+            'fingers': chord_data.get('fingers', []),
+            'barres': chord_data.get('barres', []),
+            'tuning': chord_data.get('tuning', 'EADGBE'),
+            'capo': chord_data.get('capo', 0),
+            'startingFret': chord_data.get('startingFret', 1),
+            'numFrets': chord_data.get('numFrets', 5),
+            'numStrings': chord_data.get('numStrings', 6),
+            'openStrings': chord_data.get('openStrings', []),
+            'mutedStrings': chord_data.get('mutedStrings', []),
+            'sectionId': chord_data.get('sectionId'),
+            'sectionLabel': chord_data.get('sectionLabel'),
+            'sectionRepeatCount': chord_data.get('sectionRepeatCount'),
+            'hasLineBreakAfter': chord_data.get('hasLineBreakAfter', False)
+        })
+        
+        return result
     
     def _from_sheets_format(self, sheets_data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert Sheets API format to SQLAlchemy format."""

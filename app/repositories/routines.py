@@ -69,6 +69,15 @@ class RoutineRepository(BaseRepository):
     
     def add_item_to_routine(self, routine_id: int, item_id: int, order: int = None) -> RoutineItem:
         """Add an item to a routine."""
+        # CRITICAL: item_id parameter is actually a Google Sheets ItemID (string like "139")
+        # We need to convert it to the database primary key
+        item = self.db.query(Item).filter(Item.item_id == str(item_id)).first()
+        if not item:
+            raise ValueError(f"Item with ItemID '{item_id}' not found")
+        
+        # Use the database primary key for the foreign key relationship
+        db_item_id = item.id
+        
         if order is None:
             # Get next order number
             max_order = self.db.query(func.max(RoutineItem.order)).filter(
@@ -78,7 +87,7 @@ class RoutineRepository(BaseRepository):
         
         routine_item = RoutineItem(
             routine_id=routine_id,
-            item_id=item_id,
+            item_id=db_item_id,  # Use database primary key, not Google Sheets ItemID
             order=order,
             completed=False
         )
@@ -89,8 +98,17 @@ class RoutineRepository(BaseRepository):
     
     def remove_item_from_routine(self, routine_id: int, item_id: int) -> bool:
         """Remove an item from a routine."""
+        # CRITICAL: item_id parameter is actually a Google Sheets ItemID (string like "139")
+        # We need to convert it to the database primary key
+        item = self.db.query(Item).filter(Item.item_id == str(item_id)).first()
+        if not item:
+            return False  # Item not found
+        
+        # Use the database primary key for the query
+        db_item_id = item.id
+        
         routine_item = self.db.query(RoutineItem).filter(
-            and_(RoutineItem.routine_id == routine_id, RoutineItem.item_id == item_id)
+            and_(RoutineItem.routine_id == routine_id, RoutineItem.item_id == db_item_id)
         ).first()
         
         if routine_item:
@@ -120,8 +138,17 @@ class RoutineRepository(BaseRepository):
     
     def mark_item_complete(self, routine_id: int, item_id: int, completed: bool = True) -> bool:
         """Mark a routine item as completed or not."""
+        # CRITICAL: item_id parameter is actually a Google Sheets ItemID (string like "139")
+        # We need to convert it to the database primary key
+        item = self.db.query(Item).filter(Item.item_id == str(item_id)).first()
+        if not item:
+            return False  # Item not found
+        
+        # Use the database primary key for the query
+        db_item_id = item.id
+        
         routine_item = self.db.query(RoutineItem).filter(
-            and_(RoutineItem.routine_id == routine_id, RoutineItem.item_id == item_id)
+            and_(RoutineItem.routine_id == routine_id, RoutineItem.item_id == db_item_id)
         ).first()
         
         if routine_item:

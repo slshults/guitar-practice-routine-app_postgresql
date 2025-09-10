@@ -72,7 +72,7 @@ class RoutineItem(Base):
 class ChordChart(Base):
     __tablename__ = 'chord_charts'
     
-    chord_id = Column(Integer, primary_key=True)  # ChordID - matches Google Sheets Column A
+    chord_id = Column(Integer, primary_key=True, autoincrement=True)  # ChordID - matches Google Sheets Column A
     item_id = Column(String(255), nullable=False, index=True)  # ItemID as string - matches Google Sheets Column B
     title = Column(String(255), nullable=False, index=True)  # Chord name - matches Google Sheets Column C
     chord_data = Column(JSON, nullable=False)  # SVGuitar data + section metadata - matches Google Sheets Column D

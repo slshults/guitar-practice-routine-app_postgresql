@@ -5,8 +5,11 @@ Drop-in replacement for existing routes.py during migration.
 from flask import render_template, request, jsonify, redirect, session, url_for
 from app import app
 from app.data_layer import data_layer
+from app.database import DatabaseTransaction
+from sqlalchemy import text
 import logging
 import os
+import subprocess
 
 # Main route
 @app.route('/')
@@ -63,6 +66,33 @@ def update_items_order():
     success = data_layer.update_items_order(request.json)
     return jsonify({"success": success})
 
+# Item notes
+@app.route('/api/items/<int:item_id>/notes', methods=['GET', 'POST'])
+def item_notes(item_id):
+    """Get or save notes for a specific item"""
+    if request.method == 'GET':
+        # Retrieve notes for the item
+        result = data_layer.get_item_notes(item_id)
+        if 'error' in result:
+            return jsonify(result), 404
+        return jsonify(result)
+    
+    elif request.method == 'POST':
+        # Save notes for the item
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+        
+        data = request.json
+        notes = data.get('notes', '')
+        
+        app.logger.debug(f"DEBUG:save_notes:Received note text: {notes}")
+        
+        result = data_layer.save_item_notes(item_id, notes)
+        if 'error' in result:
+            return jsonify(result), 500
+        
+        return jsonify(result)
+
 # Chord Charts API - Updated to use data layer  
 @app.route('/api/items/<int:item_id>/chord-charts', methods=['GET', 'POST'])
 def item_chord_charts(item_id):
@@ -72,12 +102,18 @@ def item_chord_charts(item_id):
         return jsonify(chord_charts)
         
     elif request.method == 'POST':
-        if not request.is_json:
-            return jsonify({"error": "Request must be JSON"}), 400
-            
-        chord_data = request.json
-        result = data_layer.add_chord_chart(item_id, chord_data)
-        return jsonify(result)
+        try:
+            if not request.is_json:
+                return jsonify({"error": "Request must be JSON"}), 400
+                
+            chord_data = request.json
+            app.logger.info(f"Creating chord chart for item {item_id}")
+            result = data_layer.add_chord_chart(item_id, chord_data)
+            app.logger.info(f"Successfully created chord chart")
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Error creating chord chart: {str(e)}", exc_info=True)
+            return jsonify({"error": f"Failed to save chord chart: {str(e)}"}), 500
 
 @app.route('/api/chord-charts/<int:chart_id>', methods=['PUT', 'DELETE'])
 def chord_chart(chart_id):
@@ -116,6 +152,108 @@ def batch_add_chord_charts(item_id):
     
     results = data_layer.batch_add_chord_charts(item_id, chord_charts_data)
     return jsonify(results)
+
+@app.route('/api/chord-charts/batch-delete', methods=['POST'])
+def batch_delete_chord_charts():
+    """Delete multiple chord charts by IDs in a single transaction."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+        
+        data = request.json
+        chord_ids = data.get('chord_ids', [])
+        
+        if not chord_ids:
+            return jsonify({"error": "No chord IDs provided"}), 400
+        
+        if not isinstance(chord_ids, list):
+            return jsonify({"error": "chord_ids must be an array"}), 400
+        
+        app.logger.info(f"Batch deleting chord charts: {chord_ids}")
+        
+        result = data_layer.batch_delete_chord_charts(chord_ids)
+        
+        if result['success']:
+            app.logger.info(f"Successfully batch deleted {result['deleted_count']} chord charts")
+            return jsonify(result)
+        else:
+            app.logger.error(f"Batch delete failed: {result.get('error', 'Unknown error')}")
+            return jsonify(result), 500
+            
+    except Exception as e:
+        app.logger.error(f"Error in batch delete chord charts: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to batch delete chord charts: {str(e)}"}), 500
+
+@app.route('/api/chord-charts/batch', methods=['POST'])
+def batch_get_chord_charts():
+    """Get chord charts for multiple items in a single request."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+        
+        data = request.json
+        item_ids = data.get('item_ids', [])
+        
+        if not item_ids:
+            return jsonify({"error": "No item IDs provided"}), 400
+        
+        if not isinstance(item_ids, list):
+            return jsonify({"error": "item_ids must be an array"}), 400
+        
+        app.logger.info(f"Batch getting chord charts for items: {item_ids}")
+        
+        result = data_layer.batch_get_chord_charts(item_ids)
+        
+        app.logger.info(f"Successfully retrieved chord charts for {len(result)} items")
+        return jsonify(result)
+            
+    except Exception as e:
+        app.logger.error(f"Error in batch get chord charts: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to batch get chord charts: {str(e)}"}), 500
+
+# AI chord chart creation
+@app.route('/api/autocreate-chord-charts', methods=['POST'])
+def autocreate_chord_charts():
+    """Autocreate chord charts from uploaded PDF/image files using Claude AI"""
+    try:
+        app.logger.info(f"Autocreate request received - Form data: {list(request.form.keys())}")
+        app.logger.info(f"Autocreate request received - Files: {list(request.files.keys())}")
+        
+        # Validate item_id parameter
+        item_id = request.form.get('itemId')
+        if not item_id:
+            app.logger.error("Autocreate failed: No itemId provided")
+            return jsonify({"error": "itemId is required"}), 400
+        
+        app.logger.info(f"Autocreate for item: {item_id}")
+        
+        # Check if files were uploaded
+        if 'files' not in request.files:
+            app.logger.error("Autocreate failed: No 'files' key in request.files")
+            return jsonify({"error": "No files uploaded"}), 400
+        
+        files = request.files.getlist('files')
+        app.logger.info(f"Files received: {len(files)} files")
+        for i, f in enumerate(files):
+            app.logger.info(f"  File {i}: {f.filename} (size: {len(f.read())} bytes)")
+            f.seek(0)  # Reset file pointer after reading for size
+        
+        if not files or all(f.filename == '' for f in files):
+            app.logger.error("Autocreate failed: No valid files selected")
+            return jsonify({"error": "No files selected"}), 400
+        
+        # For now, return a placeholder response indicating the feature needs full implementation
+        # TODO: Implement full AI-powered chord chart creation
+        return jsonify({
+            "error": "Autocreate chord charts feature is not yet implemented in PostgreSQL version",
+            "title": "Feature In Development",
+            "details": f"Received {len(files)} files for item {item_id}. This feature requires full AI integration with Anthropic Claude API.",
+            "files_received": [f.filename for f in files if f.filename]
+        }), 501  # Not Implemented
+        
+    except Exception as e:
+        app.logger.error(f"Error in autocreate chord charts: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to process autocreate request: {str(e)}"}), 500
 
 # System status and migration utilities
 @app.route('/api/system/status', methods=['GET'])
@@ -337,6 +475,20 @@ def routine(routine_id):
         success = data_layer.delete_routine(routine_id)
         return jsonify({"success": success})
 
+@app.route('/api/routines/<int:routine_id>/details', methods=['GET'])
+def get_routine_with_details(routine_id):
+    """Get a routine with all item details and metadata."""
+    try:
+        # Use existing DataLayer method that already provides detailed routine info
+        routine_data = data_layer.get_routine_with_items(routine_id)
+        if not routine_data:
+            return jsonify({"error": "Routine not found"}), 404
+        
+        return jsonify(routine_data)
+    except Exception as e:
+        app.logger.error(f"Error getting routine with details: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/routines/<int:routine_id>/items', methods=['GET', 'POST'])
 def routine_items(routine_id):
     """Handle routine items"""
@@ -345,18 +497,25 @@ def routine_items(routine_id):
         return jsonify(items)
         
     elif request.method == 'POST':
-        if not request.is_json:
-            return jsonify({"error": "Request must be JSON"}), 400
+        try:
+            if not request.is_json:
+                return jsonify({"error": "Request must be JSON"}), 400
+                
+            item_data = request.json
+            # Accept both camelCase (itemId) and snake_case (item_id) for compatibility
+            item_id = item_data.get('itemId') or item_data.get('item_id')
+            order = item_data.get('order')
             
-        item_data = request.json
-        item_id = item_data.get('item_id')
-        order = item_data.get('order')
-        
-        if not item_id:
-            return jsonify({"error": "item_id is required"}), 400
-            
-        result = data_layer.add_item_to_routine(routine_id, int(item_id), order)
-        return jsonify(result)
+            if not item_id:
+                return jsonify({"error": "itemId is required"}), 400
+                
+            app.logger.info(f"Adding item {item_id} to routine {routine_id}")
+            result = data_layer.add_item_to_routine(routine_id, int(item_id), order)
+            app.logger.info(f"Successfully added item to routine")
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Error adding item to routine: {str(e)}", exc_info=True)
+            return jsonify({"error": f"Failed to add item to routine: {str(e)}"}), 500
 
 @app.route('/api/routines/<int:routine_id>/items/<int:item_id>', methods=['DELETE'])
 def routine_item(routine_id, item_id):
@@ -486,3 +645,124 @@ def migrate_test():
         "message": "Migration test not implemented yet",
         "current_mode": data_layer.mode
     })
+
+@app.route('/api/chord-charts/common/search', methods=['GET'])
+def search_common_chords():
+    """Search CommonChords by chord name"""
+    chord_name = request.args.get('name', '').strip()
+    if not chord_name:
+        return jsonify({"error": "name parameter is required"}), 400
+    
+    try:
+        # Search for exact matches first, then partial matches
+        with DatabaseTransaction() as db:
+            # Exact match first (case-insensitive)
+            exact_results = db.execute(
+                text("""
+                    SELECT id, type, name, chord_data, created_at, order_col
+                    FROM common_chords 
+                    WHERE LOWER(name) = LOWER(:name)
+                    ORDER BY order_col, id
+                    LIMIT 10
+                """),
+                {"name": chord_name}
+            ).fetchall()
+            
+            if exact_results:
+                # Convert to format expected by frontend
+                chords = []
+                for row in exact_results:
+                    # Parse the chord_data JSON and flatten it to top level
+                    import json
+                    chord_data = json.loads(row[3]) if isinstance(row[3], str) else row[3]
+                    
+                    # Flatten chord data to top level for frontend compatibility  
+                    chord_obj = {
+                        "id": row[0],
+                        "type": row[1], 
+                        "title": row[2],  # Frontend expects 'title' not 'name'
+                        "created_at": row[4],
+                        "order": row[5],
+                        # Flatten chord data properties to top level
+                        "fingers": chord_data.get("fingers", []),
+                        "barres": chord_data.get("barres", []),
+                        "openStrings": chord_data.get("openStrings", []),
+                        "mutedStrings": chord_data.get("mutedStrings", []),
+                        "startingFret": chord_data.get("startingFret", 1),
+                        "numFrets": chord_data.get("numFrets", 5),
+                        "numStrings": chord_data.get("numStrings", 6),
+                        "tuning": chord_data.get("tuning", "EADGBE"),
+                        "capo": chord_data.get("capo", 0)
+                    }
+                    chords.append(chord_obj)
+                return jsonify(chords)
+            
+            # If no exact matches, try partial matches
+            partial_results = db.execute(
+                text("""
+                    SELECT id, type, name, chord_data, created_at, order_col
+                    FROM common_chords 
+                    WHERE LOWER(name) LIKE LOWER(:pattern)
+                    ORDER BY order_col, id
+                    LIMIT 10
+                """),
+                {"pattern": f"%{chord_name}%"}
+            ).fetchall()
+            
+            chords = []
+            for row in partial_results:
+                # Parse the chord_data JSON and flatten it to top level
+                import json
+                chord_data = json.loads(row[3]) if isinstance(row[3], str) else row[3]
+                
+                # Flatten chord data to top level for frontend compatibility  
+                chord_obj = {
+                    "id": row[0],
+                    "type": row[1], 
+                    "title": row[2],  # Frontend expects 'title' not 'name'
+                    "created_at": row[4],
+                    "order": row[5],
+                    # Flatten chord data properties to top level
+                    "fingers": chord_data.get("fingers", []),
+                    "barres": chord_data.get("barres", []),
+                    "openStrings": chord_data.get("openStrings", []),
+                    "mutedStrings": chord_data.get("mutedStrings", []),
+                    "startingFret": chord_data.get("startingFret", 1),
+                    "numFrets": chord_data.get("numFrets", 5),
+                    "numStrings": chord_data.get("numStrings", 6),
+                    "tuning": chord_data.get("tuning", "EADGBE"),
+                    "capo": chord_data.get("capo", 0)
+                }
+                chords.append(chord_obj)
+            
+            return jsonify(chords)
+            
+    except Exception as e:
+        app.logger.error(f"Error searching CommonChords: {str(e)}")
+        return jsonify({"error": "Failed to search CommonChords"}), 500
+
+@app.route('/api/open-folder', methods=['POST'])
+def open_folder():
+    """Open a local folder in Windows Explorer (WSL-compatible)"""
+    try:
+        folder_path = request.json.get('path')
+        if not folder_path:
+            return jsonify({'error': 'No path provided'}), 400
+
+        app.logger.debug(f"Opening folder: {folder_path}")
+
+        # Keep Windows path format but ensure proper escaping
+        windows_path = folder_path.replace('/', '\\')
+        
+        # In WSL, we'll use explorer.exe to open Windows File Explorer
+        try:
+            # Use the Windows path directly with explorer.exe
+            subprocess.run(['explorer.exe', windows_path], check=True)
+            return jsonify({'success': True})
+        except subprocess.CalledProcessError as e:
+            app.logger.error(f"Failed to open folder: {str(e)}")
+            return jsonify({'error': f'Failed to open folder: {str(e)}'}), 500
+
+    except Exception as e:
+        app.logger.error(f"Error in open_folder: {str(e)}")
+        return jsonify({'error': str(e)}), 500
