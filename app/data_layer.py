@@ -447,6 +447,20 @@ class DataLayer:
             "use_postgres_env": USE_POSTGRES,
             "migration_mode_env": MIGRATION_MODE
         }
+    
+    def copy_chord_charts_to_items(self, source_item_id: str, target_item_ids: List[str]) -> Dict[str, Any]:
+        """Copy chord charts from one item to multiple target items."""
+        if self.mode == 'postgres':
+            # PostgreSQL implementation using ChordChartService
+            try:
+                chord_service = ChordChartService()
+                return chord_service.copy_chord_charts_to_items(source_item_id, target_item_ids)
+            except Exception as e:
+                logging.error(f"PostgreSQL copy_chord_charts_to_items failed: {e}")
+                raise
+        else:
+            # Fallback to sheets implementation
+            return sheets.copy_chord_charts_to_items(source_item_id, target_item_ids)
 
 # Global instance
 data_layer = DataLayer()

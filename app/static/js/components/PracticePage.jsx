@@ -285,7 +285,8 @@ const findSimilarSongs = (sourceTitle, allItems, sourceItemId) => {
   
   return allItems.filter(item => {
     // Skip the source item itself
-    if (item['A'] === sourceItemId) return false;
+    // sourceItemId is Item ID (Column B), so compare with item['B']
+    if (item['B'] === sourceItemId) return false;
     
     const itemTitle = item['C'] || '';
     const itemBaseName = extractBaseSongName(itemTitle);
@@ -693,12 +694,13 @@ export const PracticePage = () => {
   // Lazy-load chord charts only when chord section is expanded
   // Batch load chord charts for all items in the routine
   const loadAllChordCharts = useCallback(async () => {
+    console.log('[DEBUG BATCH] loadAllChordCharts called');
     if (!routine || !routine.items) return;
     
     // Get all item IDs that need chord charts loaded
-    const itemIds = routine.items
-      .map(item => item['B']) // Column B is Item ID
-      .filter(itemId => !chordCharts[itemId]); // Only load if not already loaded
+    const allItemIds = routine.items.map(item => item['B']);
+    const itemIds = allItemIds.filter(itemId => !chordCharts[itemId]); // Only load if not already loaded
+    console.log('[DEBUG BATCH] All routine items:', allItemIds, 'Items needing loading:', itemIds, 'Current chordCharts keys:', Object.keys(chordCharts));
     
     if (itemIds.length === 0) return;
     
@@ -764,6 +766,7 @@ export const PracticePage = () => {
   
   // Batch load chord charts when routine changes
   useEffect(() => {
+    console.log('[DEBUG EFFECT] useEffect triggered for routine/loadAllChordCharts');
     if (routine && routine.items) {
       loadAllChordCharts();
       // Track active routine when practice page is visited
@@ -1012,9 +1015,10 @@ export const PracticePage = () => {
     
     // Get source item directly from allItems instead of using getItemDetails
     // This prevents recalculation when getItemDetails recreates due to cache changes
-    const sourceItem = allItems.find(item => item['A'] === copySourceItemId);
+    // copySourceItemId is Item ID (Column B), so find by item['B']
+    const sourceItem = allItems.find(item => item['B'] === copySourceItemId);
     const sourceTitle = sourceItem?.['C'] || '';
-    const allFilteredItems = allItems.filter(item => item['A'] !== copySourceItemId);
+    const allFilteredItems = allItems.filter(item => item['B'] !== copySourceItemId);
     
     return new Set(
       findSimilarSongs(sourceTitle, allFilteredItems, copySourceItemId).map(item => item['A'])
@@ -1028,7 +1032,8 @@ export const PracticePage = () => {
     return allItems
       .filter(item => {
         // Filter out the source item
-        if (item['A'] === copySourceItemId) return false;
+        // copySourceItemId is Item ID (Column B), so compare with item['B']
+        if (item['B'] === copySourceItemId) return false;
         
         // Filter by search term
         if (copySearchTerm.trim()) {
@@ -1842,7 +1847,8 @@ export const PracticePage = () => {
     setCopySourceItemId(itemId);
     
     // Get source item details for fuzzy matching
-    const sourceItem = getItemDetails(itemId);
+    // itemId is the Item ID (Column B), but we need to find the actual item in allItems
+    const sourceItem = allItems?.find(item => item['B'] === itemId);
     const sourceTitle = sourceItem?.['C'] || '';
     
     // Find similar songs first
@@ -1926,11 +1932,65 @@ export const PracticePage = () => {
       const result = await response.json();
       console.log('Chord charts copied successfully:', result);
 
-      // Refresh chord charts for all affected items
+      // Force refresh chord charts for all affected items using the proven autocreate pattern
       const affectedItems = [copySourceItemId, ...Array.from(selectedTargetItems)];
+      console.log('[DEBUG COPY] About to refresh chord charts for affected items:', affectedItems);
       for (const itemId of affectedItems) {
-        if (chordCharts[itemId]) {
-          await loadChordChartsForItem(itemId);
+        try {
+          const response = await fetch(`/api/items/${itemId}/chord-charts`);
+          if (response.ok) {
+            const charts = await response.json();
+
+            // Update chord charts state like autocreate does
+            console.log('[DEBUG COPY] Updating chordCharts state for item', itemId, 'with', charts.length, 'charts');
+            setChordCharts(prev => ({
+              ...prev,
+              [itemId]: charts
+            }));
+
+            // Build sections from loaded chord charts using inline logic like autocreate
+            if (charts.length === 0) {
+              setChordSections(prev => ({
+                ...prev,
+                [itemId]: []
+              }));
+            } else {
+              // Group chords by their section metadata (same logic as autocreate)
+              const sectionMap = new Map();
+
+              charts.forEach(chart => {
+                const sectionId = chart.sectionId || 'section-1';
+                const sectionLabel = chart.sectionLabel || 'Verse';
+                const sectionRepeatCount = chart.sectionRepeatCount || '';
+
+                if (!sectionMap.has(sectionId)) {
+                  sectionMap.set(sectionId, {
+                    id: sectionId,
+                    label: sectionLabel,
+                    repeatCount: sectionRepeatCount,
+                    chords: []
+                  });
+                }
+
+                sectionMap.get(sectionId).chords.push(chart);
+              });
+
+              // Convert to array and sort sections by the order of their first chord
+              const sections = Array.from(sectionMap.values()).sort((a, b) => {
+                const aFirstOrder = a.chords.length > 0 ? (a.chords[0].order || 0) : 0;
+                const bFirstOrder = b.chords.length > 0 ? (b.chords[0].order || 0) : 0;
+                return aFirstOrder - bFirstOrder;
+              });
+
+              console.log('[DEBUG COPY] Updating chordSections state for item', itemId, 'with', sections.length, 'sections');
+              setChordSections(prev => ({
+                ...prev,
+                [itemId]: sections
+              }));
+            }
+          }
+        } catch (refreshError) {
+          console.error('Error refreshing chord charts for item', itemId, refreshError);
         }
       }
 
@@ -2570,6 +2630,8 @@ export const PracticePage = () => {
                           const sectionsFromState = chordSections[itemReferenceId];
                           const sectionsFromCharts = sectionsFromState ? null : getChordSections(itemReferenceId);
                           const finalSections = sectionsFromState || sectionsFromCharts || [];
+
+                          console.log(`[DEBUG RENDER] Item ${itemReferenceId}: sectionsFromState=${sectionsFromState?.length || 0}, sectionsFromCharts=${sectionsFromCharts?.length || 0}, finalSections=${finalSections?.length || 0}`);
                           
                           // Map sections to JSX elements with itemReferenceId in scope
                           const sections = finalSections.map((section, sectionIndex) => {
@@ -3094,7 +3156,7 @@ export const PracticePage = () => {
                 </h2>
                 
                 <p className="text-gray-300 mb-2">
-                  Copy chord charts from "{getItemDetails(copySourceItemId)?.['C'] || 'Unknown Song'}" to:
+                  Copy chord charts from "{allItems?.find(item => item['B'] === copySourceItemId)?.['C'] || 'Unknown Song'}" to:
                 </p>
                 
 

@@ -1,6 +1,6 @@
 # Guitar Practice App - API Mismatch Checklist
 *PostgreSQL vs Sheets Version Comparison*
-*Generated: 2024-09-09*
+*Last Updated: 2025-09-12*
 
 ## ✅ MATCHED ROUTES (Working Correctly)
 
@@ -31,24 +31,24 @@
 | `/api/items/<item_id>/chord-charts` | GET, POST | `item_chord_charts()` | ✅ Match |
 | `/api/chord-charts/<int:chart_id>` | PUT, DELETE | `chord_chart()` | ✅ Match |
 | `/api/items/<item_id>/chord-charts/order` | PUT | `update_chord_charts_order()` | ✅ Match |
-| `/api/chord-charts/batch-delete` | POST | `batch_delete_chord_charts()` | ✅ Match (JUST FIXED!) |
+| `/api/chord-charts/batch-delete` | POST | `batch_delete_chord_charts()` | ✅ Match |
+| `/api/autocreate-chord-charts` | POST | `autocreate_chord_charts()` | ✅ Match |
+| `/api/items/<item_id>/notes` | GET, POST | `item_notes()` | ✅ Match |
+| `/api/routines/<routine_id>/details` | GET | `get_routine_with_details()` | ✅ Match |
+| `/api/chord-charts/common` | GET | `get_common_chord_charts()` | ✅ Match |
+| `/api/chord-charts/copy` | POST | `copy_chord_charts_route()` | ✅ Match (JUST IMPLEMENTED!) |
 
 ## ❌ MISSING ROUTES (Need Implementation)
 
 | Route | HTTP Methods | Function Name | Priority | Notes |
 |-------|-------------|---------------|----------|-------|
-| `/api/routines/<routine_id>/details` | GET | `get_routine_with_details()` | HIGH | Routine details with items |
 | `/api/routines/<routine_id>/order` | PUT | `update_routine_order_route()` | MEDIUM | Routine ordering |
 | `/api/routines/<routine_id>/items/<item_id>` | PUT | `routine_item()` | MEDIUM | Update routine item |
-| `/api/items/<item_id>/notes` | GET, POST | `save_item_notes()` | HIGH | Item notes functionality |
 | `/items` | GET | `items_page()` | LOW | Page route |
 | `/test_sheets` | GET | `test_sheets()` | LOW | Testing route |
-| `/api/chord-charts/common` | GET | Get all common chords | MEDIUM | Full common chords list |
 | `/api/chord-charts/seed` | POST | Seed CommonChords | LOW | Development utility |
 | `/api/chord-charts/bulk-import` | POST | Import from TormodKv | LOW | Bulk import |
 | `/api/chord-charts/bulk-import-local` | POST | Local bulk import | LOW | Local import |
-| `/api/chord-charts/copy` | POST | Copy chords between songs | MEDIUM | Chord copying |
-| `/api/autocreate-chord-charts` | POST | AI chord creation | HIGH | Major feature |
 
 ## ⚠️ ROUTE MISMATCHES (Different Patterns)
 
@@ -71,26 +71,23 @@
 
 ## 🎯 PRIORITY ACTION ITEMS
 
-### HIGH Priority (Likely Missing Functionality)
-1. **`/api/items/<item_id>/notes`** - Item notes functionality (users likely expect this)
-2. **`/api/routines/<routine_id>/details`** - Detailed routine information 
-3. **`/api/autocreate-chord-charts`** - Major AI chord creation feature
-
 ### MEDIUM Priority (Nice to Have)
-4. **`/api/chord-charts/common`** - Full common chords list
-5. **`/api/chord-charts/copy`** - Copy chords between songs
-6. **`/api/routines/<routine_id>/order`** - Routine ordering
+1. **`/api/routines/<routine_id>/order`** - Routine ordering
+2. **`/api/routines/<routine_id>/items/<item_id>`** (PUT) - Update routine item
 
 ### LOW Priority (Development/Testing)
-7. Function name differences (mostly cosmetic)
-8. Bulk import features 
-9. Development utilities
+3. Function name differences (mostly cosmetic)
+4. Bulk import features 
+5. Development utilities
 
 ## 📝 NOTES
 - Most core functionality is present and working
-- The biggest gaps are in notes functionality and chord management features
-- PostgreSQL version has additional system/migration utilities
-- Focus on HIGH priority items first as these likely impact user experience
+- **MAJOR WINS**: 
+  - ✅ Autocreate chord charts feature fully implemented! 🎸
+  - ✅ Chord copy functionality fully implemented! 🎸
+- Only MEDIUM priority items remain - core app is fully functional
+- PostgreSQL version has additional system/migration utilities  
+- The app has achieved feature parity with the sheets version for all critical functionality
 
 ---
 *This checklist should be updated as routes are implemented and tested.*

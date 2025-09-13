@@ -101,3 +101,48 @@ class ChordChartService(BaseService):
             }
         
         return self._execute_with_transaction(_get_stats)
+    
+    def copy_chord_charts_to_items(self, source_item_id: str, target_item_ids: List[str]) -> Dict[str, Any]:
+        """Copy chord charts from source item to multiple target items (PostgreSQL version)."""
+        def _copy_charts():
+            repo = ChordChartRepository(self.db)
+            
+            # Get source charts using ItemID (no conversion needed)
+            source_charts = repo.get_for_item(source_item_id)
+            if not source_charts:
+                logging.warning(f"No chord charts found for source item {source_item_id}")
+                return {'updated': 0, 'removed': 0, 'charts_found': 0, 'target_items': []}
+            
+            updated_count = 0
+            removed_count = 0
+            
+            # For each target item
+            for target_item_id in target_item_ids:
+                # Remove existing chord charts from target item
+                removed_count += repo.delete_all_for_item(target_item_id)
+                logging.info(f"Removed existing charts from item {target_item_id}")
+                
+                # Copy source charts to target item using batch_create
+                chart_data_list = []
+                for source_chart in source_charts:
+                    chart_data = {
+                        'title': source_chart.title,
+                        'chord_data': source_chart.chord_data,
+                        'order': source_chart.order_col  # Use order_col from ChordChart model
+                    }
+                    chart_data_list.append(chart_data)
+                
+                # Create all charts for this target item
+                if chart_data_list:
+                    new_charts = repo.batch_create(target_item_id, chart_data_list)
+                    updated_count += len(new_charts)
+                    logging.info(f"Copied {len(new_charts)} charts to item {target_item_id}")
+            
+            return {
+                'updated': updated_count,
+                'removed': removed_count,
+                'charts_found': len(source_charts),
+                'target_items': target_item_ids
+            }
+        
+        return self._execute_with_transaction(_copy_charts)

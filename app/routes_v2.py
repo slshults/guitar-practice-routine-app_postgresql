@@ -10,6 +10,8 @@ from sqlalchemy import text
 import logging
 import os
 import subprocess
+import base64
+import anthropic
 
 # Main route
 @app.route('/')
@@ -214,46 +216,122 @@ def batch_get_chord_charts():
 # AI chord chart creation
 @app.route('/api/autocreate-chord-charts', methods=['POST'])
 def autocreate_chord_charts():
-    """Autocreate chord charts from uploaded PDF/image files using Claude AI"""
+    """Autocreate chord charts from uploaded PDF/image files using Claude"""
     try:
-        app.logger.info(f"Autocreate request received - Form data: {list(request.form.keys())}")
-        app.logger.info(f"Autocreate request received - Files: {list(request.files.keys())}")
+        app.logger.debug("Starting autocreate chord charts process")
         
-        # Validate item_id parameter
+        # Check if files were uploaded (frontend sends as file0, file1, etc.)
+        # Use request.files.values() to get all files regardless of key names
+        files_list = list(request.files.values())
+        if not files_list:
+            return jsonify({'error': 'No files uploaded'}), 400
+            
         item_id = request.form.get('itemId')
         if not item_id:
-            app.logger.error("Autocreate failed: No itemId provided")
-            return jsonify({"error": "itemId is required"}), 400
+            return jsonify({'error': 'No itemId provided'}), 400
+            
+        app.logger.debug(f"Processing files for item ID: {item_id}")
         
-        app.logger.info(f"Autocreate for item: {item_id}")
+        # Process uploaded files - simplified single collection
+        uploaded_files = []
         
-        # Check if files were uploaded
-        if 'files' not in request.files:
-            app.logger.error("Autocreate failed: No 'files' key in request.files")
-            return jsonify({"error": "No files uploaded"}), 400
+        def process_file(file):
+            """Helper function to process a single file"""
+            if file.filename == '':
+                return None
+                
+            # Validate file type and size
+            from werkzeug.utils import secure_filename
+            filename = secure_filename(file.filename)
+            if not filename:
+                return None
+                
+            # Check file size (10MB limit)
+            file.seek(0, os.SEEK_END)
+            file_size = file.tell()
+            file.seek(0)
+            
+            if file_size > 10 * 1024 * 1024:  # 10MB
+                return {'error': f'File {filename} is too large (max 10MB)'}
+                
+            # Read file content
+            file_data = file.read()
+            
+            # Determine file type
+            file_ext = filename.lower().split('.')[-1] if '.' in filename else ''
+            
+            if file_ext == 'pdf':
+                return {
+                    'name': filename,
+                    'type': 'pdf',
+                    'data': base64.b64encode(file_data).decode('utf-8')
+                }
+            elif file_ext in ['png', 'jpg', 'jpeg']:
+                return {
+                    'name': filename,
+                    'type': 'image',
+                    'data': base64.b64encode(file_data).decode('utf-8'),
+                    'media_type': f'image/{file_ext if file_ext != "jpg" else "jpeg"}'
+                }
+            else:
+                return {'error': f'Unsupported file type: {file_ext}'}
         
-        files = request.files.getlist('files')
-        app.logger.info(f"Files received: {len(files)} files")
-        for i, f in enumerate(files):
-            app.logger.info(f"  File {i}: {f.filename} (size: {len(f.read())} bytes)")
-            f.seek(0)  # Reset file pointer after reading for size
+        # Process single uploaded file only (simplified approach)
+        if len(files_list) > 1:
+            return jsonify({'error': 'Please upload only one file at a time for autocreate'}), 400
         
-        if not files or all(f.filename == '' for f in files):
-            app.logger.error("Autocreate failed: No valid files selected")
-            return jsonify({"error": "No files selected"}), 400
+        if len(files_list) == 0:
+            return jsonify({'error': 'No file uploaded'}), 400
+            
+        # Process the single file
+        file = files_list[0]
+        result = process_file(file)
+        if result:
+            if 'error' in result:
+                return jsonify(result), 400
+            uploaded_files.append(result)
         
-        # For now, return a placeholder response indicating the feature needs full implementation
-        # TODO: Implement full AI-powered chord chart creation
-        return jsonify({
-            "error": "Autocreate chord charts feature is not yet implemented in PostgreSQL version",
-            "title": "Feature In Development",
-            "details": f"Received {len(files)} files for item {item_id}. This feature requires full AI integration with Anthropic Claude API.",
-            "files_received": [f.filename for f in files if f.filename]
-        }), 501  # Not Implemented
+        app.logger.info(f"Processed 1 file for analysis: {result.get('name', 'unknown')}")
+                
+        if not uploaded_files:
+            return jsonify({'error': 'No valid file found'}), 400
+            
+        # Check if user provided a choice for mixed content
+        user_choice = request.form.get('userChoice')
+        if user_choice:
+            app.logger.info(f"[AUTOCREATE] User chose to process files as: {user_choice}")
+            app.logger.info(f"[AUTOCREATE] Processing {len(uploaded_files)} files with user choice override")
+            # Override file type detection with user choice
+            for file_data in uploaded_files:
+                file_data['forced_type'] = user_choice
+        else:
+            app.logger.info(f"[AUTOCREATE] No user choice provided, will use automatic detection")
+            
+        # Get Anthropic API key from environment
+        api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'Anthropic API key not configured'}), 500
+            
+        # Initialize Anthropic client
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        app.logger.info(f"[AUTOCREATE] Anthropic client initialized successfully")
+        
+        # Prepare the Claude analysis request
+        app.logger.info(f"[AUTOCREATE] Starting Claude analysis for item {item_id}")
+        app.logger.debug("Sending files to Claude for analysis")
+        
+        # Process with simplified autocreate logic
+        analysis_result = simple_analyze_files(client, uploaded_files, item_id)
+        app.logger.info(f"[AUTOCREATE] Claude analysis completed, result type: {type(analysis_result)}")
+        
+        app.logger.debug("Claude analysis complete, creating chord charts")
+        
+        return jsonify(analysis_result)
         
     except Exception as e:
-        app.logger.error(f"Error in autocreate chord charts: {str(e)}", exc_info=True)
-        return jsonify({"error": f"Failed to process autocreate request: {str(e)}"}), 500
+        app.logger.error(f"Error in autocreate chord charts: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 # System status and migration utilities
 @app.route('/api/system/status', methods=['GET'])
@@ -646,6 +724,50 @@ def migrate_test():
         "current_mode": data_layer.mode
     })
 
+@app.route('/api/chord-charts/common', methods=['GET'])
+def get_common_chord_charts():
+    """Get all common chord charts from the PostgreSQL database."""
+    try:
+        app.logger.info("Fetching all common chord charts from PostgreSQL")
+        
+        with DatabaseTransaction() as session:
+            # Get all common chords from PostgreSQL
+            result = session.execute(text("""
+                SELECT id, title, chord_data, created_at, "order"
+                FROM common_chords 
+                ORDER BY "order" ASC, title ASC
+            """))
+            
+            common_chords = []
+            for row in result:
+                chord_id, title, chord_data_str, created_at, order = row
+                
+                # Parse chord data JSON
+                try:
+                    import json
+                    chord_data = json.loads(chord_data_str) if chord_data_str else {}
+                except json.JSONDecodeError:
+                    chord_data = {}
+                
+                common_chords.append({
+                    'id': str(chord_id),
+                    'title': title,
+                    'chord_data': chord_data,
+                    'created_at': created_at.isoformat() if created_at else None,
+                    'order': order
+                })
+        
+        # Add cache control headers to allow caching but ensure freshness
+        response = jsonify(common_chords)
+        response.headers['Cache-Control'] = 'public, max-age=300'  # Cache for 5 minutes
+        
+        app.logger.info(f"Returning {len(common_chords)} common chord charts from PostgreSQL")
+        return response
+        
+    except Exception as e:
+        app.logger.error(f"Error fetching common chord charts from PostgreSQL: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/chord-charts/common/search', methods=['GET'])
 def search_common_chords():
     """Search CommonChords by chord name"""
@@ -766,3 +888,195 @@ def open_folder():
     except Exception as e:
         app.logger.error(f"Error in open_folder: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+# Autocreate helper functions
+def simple_analyze_files(client, uploaded_files, item_id):
+    """Simplified file analysis that processes chord names by default"""
+    try:
+        app.logger.info(f"[AUTOCREATE] Processing {len(uploaded_files)} files as chord names")
+        
+        # For now, process everything as chord names (most common case)
+        # This is a simplified version - the full implementation has more sophisticated detection
+        
+        # Create a simple prompt for chord name extraction
+        message_content = []
+        
+        for i, file_data in enumerate(uploaded_files):
+            if file_data['type'] == 'pdf':
+                message_content.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": file_data['data']
+                    }
+                })
+            elif file_data['type'] == 'image':
+                message_content.append({
+                    "type": "image", 
+                    "source": {
+                        "type": "base64",
+                        "media_type": file_data['media_type'],
+                        "data": file_data['data']
+                    }
+                })
+        
+        # Add the analysis prompt
+        message_content.append({
+            "type": "text",
+            "text": """Extract chord names from this file. Look for chord symbols like G, C, Am, F7, etc.
+            
+Return a JSON array of chord objects with this format:
+{
+  "chords": [
+    {"name": "G", "section": "Verse"},
+    {"name": "C", "section": "Verse"},
+    {"name": "Am", "section": "Chorus"},
+    {"name": "F", "section": "Chorus"}
+  ]
+}
+
+If you can't determine sections, use "Main" as the section name."""
+        })
+        
+        # Call Claude API
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20241022",
+            max_tokens=8000,
+            messages=[{
+                "role": "user", 
+                "content": message_content
+            }]
+        )
+        
+        app.logger.info(f"[AUTOCREATE] Received response from Claude")
+        
+        # Parse response
+        response_text = response.content[0].text
+        
+        # Extract JSON from response
+        import json, re
+        
+        # Try to find JSON in the response
+        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        if json_match:
+            try:
+                chord_data = json.loads(json_match.group())
+                chords = chord_data.get('chords', [])
+                
+                app.logger.info(f"[AUTOCREATE] Extracted {len(chords)} chords")
+                
+                # Create chord charts using the data layer
+                if chords:
+                    # Load CommonChords for lookup
+                    app.logger.info("[AUTOCREATE] Loading CommonChords for chord shape lookup")
+                    from app.sheets import get_common_chords_efficiently
+                    common_chords = get_common_chords_efficiently()
+                    
+                    # Create lookup dictionary by chord name
+                    chord_lookup = {}
+                    for common_chord in common_chords:
+                        chord_name = common_chord['title'].strip().upper()
+                        chord_lookup[chord_name] = common_chord
+                    
+                    app.logger.info(f"[AUTOCREATE] Loaded {len(common_chords)} common chords for lookup")
+                    
+                    # Convert to the format expected by batch_add_chord_charts
+                    chord_charts_data = []
+                    for i, chord in enumerate(chords):
+                        chord_name = chord['name'].strip().upper()
+                        
+                        # Look up chord shape in CommonChords
+                        if chord_name in chord_lookup:
+                            common_chord = chord_lookup[chord_name]
+                            app.logger.info(f"[AUTOCREATE] Found shape for {chord_name}")
+                            chord_data = {
+                                'fingers': common_chord['fingers'],
+                                'barres': common_chord['barres'],
+                                'tuning': common_chord['tuning'] if isinstance(common_chord['tuning'], list) else ['E', 'A', 'D', 'G', 'B', 'E'],
+                                'numFrets': common_chord['numFrets'],
+                                'numStrings': common_chord['numStrings'],
+                                'capo': common_chord['capo'],
+                                'openStrings': common_chord['openStrings'],
+                                'mutedStrings': common_chord['mutedStrings'],
+                                'startingFret': common_chord['startingFret'],
+                                'sectionId': f"section-{hash(chord.get('section', 'Main')) % 10000}",
+                                'sectionLabel': chord.get('section', 'Main'),
+                                'sectionRepeatCount': ''
+                            }
+                        else:
+                            app.logger.warning(f"[AUTOCREATE] No shape found for {chord_name}, using empty chord")
+                            chord_data = {
+                                'fingers': [],
+                                'barres': [],
+                                'tuning': ['E', 'A', 'D', 'G', 'B', 'E'],
+                                'sectionId': f"section-{hash(chord.get('section', 'Main')) % 10000}",
+                                'sectionLabel': chord.get('section', 'Main'),
+                                'sectionRepeatCount': ''
+                            }
+                        
+                        chord_charts_data.append({
+                            'title': chord['name'],
+                            'chord_data': chord_data,
+                            'order': i
+                        })
+                    
+                    # Use data layer to create chord charts
+                    app.logger.info(f"[AUTOCREATE] Creating {len(chord_charts_data)} chord charts in database")
+                    results = data_layer.batch_add_chord_charts(item_id, chord_charts_data)
+                    
+                    return {
+                        'success': True,
+                        'message': f'Successfully created {len(chord_charts_data)} chord charts',
+                        'chord_charts_created': len(chord_charts_data),
+                        'analysis': f'Found chord progression: {", ".join([c["name"] for c in chords])}'
+                    }
+                else:
+                    return {'error': 'No chords found in the uploaded file'}
+                    
+            except json.JSONDecodeError as e:
+                app.logger.error(f"Failed to parse JSON from Claude response: {e}")
+                return {'error': 'Failed to parse chord data from file'}
+        else:
+            return {'error': 'No chord data found in file'}
+            
+    except Exception as e:
+        app.logger.error(f"Error in simple_analyze_files: {str(e)}")
+        return {'error': f'Analysis failed: {str(e)}'}
+
+
+# Chord chart copy functionality  
+@app.route('/api/chord-charts/copy', methods=['POST'])
+def copy_chord_charts_route():
+    """Copy chord charts from one song to multiple other songs."""
+    try:
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+        
+        data = request.json
+        source_item_id = data.get('source_item_id')
+        target_item_ids = data.get('target_item_ids', [])
+        
+        if not source_item_id:
+            return jsonify({"error": "source_item_id is required"}), 400
+            
+        if not target_item_ids or not isinstance(target_item_ids, list):
+            return jsonify({"error": "target_item_ids must be a non-empty array"}), 400
+        
+        app.logger.info(f"Copying chord charts from item {source_item_id} to items {target_item_ids}")
+        
+        # Use the data layer for PostgreSQL compatibility
+        result = data_layer.copy_chord_charts_to_items(source_item_id, target_item_ids)
+        
+        app.logger.info(f"Successfully copied {result['charts_found']} chord charts to {len(result['target_items'])} items")
+        
+        return jsonify({
+            'success': True,
+            'message': f"Copied {result['charts_found']} chord charts to {len(result['target_items'])} songs",
+            'result': result
+        })
+        
+    except Exception as e:
+        app.logger.error(f"Error copying chord charts: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500

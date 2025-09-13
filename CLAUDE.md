@@ -543,4 +543,26 @@ See `API_MISMATCH_CHECKLIST.md` in project root for comprehensive comparison bet
 - Current implementation status
 - Should be updated as features are implemented
 
+## PostgreSQL Migration Troubleshooting Patterns
+
+### Common ID Mismatch Issues
+**Root Cause**: PostgreSQL migration preserved Google Sheets structure where:
+- **Column A**: Database primary key (auto-incrementing integer)
+- **Column B**: Google Sheets ItemID (string like "107")
+
+**Symptoms**:
+- Wrong item names in dialogs
+- Filtering/sorting broken
+- API returns wrong data despite correct database content
+
+**Fix Pattern**: Always use ItemIDs (Column B) for frontend communication, never database primary keys (Column A).
+
+### Common Repository/Model Attribute Issues
+**ChordChart Model**: Uses `order_col` (not `order`) and `chord_id` (not `id`) to match Google Sheets columns
+**Fix Pattern**: Check model definitions in `app/models.py` for exact attribute names
+
+### File Upload Patterns
+**Frontend sends**: `file0`, `file1`, etc. (not `'files'`)
+**Backend fix**: Use `request.files.values()` to capture all files regardless of key names
+
 Anon, we rock n roll 🙌🤘🎸...
