@@ -116,41 +116,102 @@ class RoutineRepository(BaseRepository):
             self.db.commit()
             return True
         return False
-    
+
+    def remove_routine_item_by_id(self, routine_id: int, routine_item_id: int) -> bool:
+        """Remove a specific routine item by its ID."""
+        routine_item = self.db.query(RoutineItem).filter(
+            and_(RoutineItem.routine_id == routine_id, RoutineItem.id == routine_item_id)
+        ).first()
+
+        if routine_item:
+            self.db.delete(routine_item)
+            self.db.commit()
+            return True
+        return False
+
     def update_routine_items_order(self, routine_id: int, items: List[Dict[str, Any]]) -> bool:
         """Update routine item ordering."""
         try:
+            updated_count = 0
             for item_data in items:
                 routine_item_id = item_data.get('A')  # RoutineItem ID
                 new_order = item_data.get('C', 0)  # Order
-                
+
                 if routine_item_id:
-                    self.db.query(RoutineItem).filter(
-                        and_(RoutineItem.id == int(routine_item_id), 
+                    result = self.db.query(RoutineItem).filter(
+                        and_(RoutineItem.id == int(routine_item_id),
                              RoutineItem.routine_id == routine_id)
                     ).update({RoutineItem.order: int(new_order)})
-            
+                    updated_count += result
+                    logging.debug(f"Updated routine item {routine_item_id} (routine {routine_id}) order to {new_order}: {result} rows affected")
+
             self.db.commit()
+            logging.info(f"Successfully updated {updated_count} routine item orders out of {len(items)} requested for routine {routine_id}")
             return True
-        except Exception:
+        except Exception as e:
+            logging.error(f"Error updating routine items order: {str(e)}")
             self.db.rollback()
             return False
     
-    def mark_item_complete(self, routine_id: int, item_id: int, completed: bool = True) -> bool:
+    def update_routines_order(self, routines: List[Dict[str, Any]]) -> bool:
+        """Update the order of routines in the routines list."""
+        try:
+            updated_count = 0
+            for routine_data in routines:
+                routine_id = routine_data.get('A')  # Routine ID
+                new_order = routine_data.get('D', 0)  # Order (Column D)
+
+                if routine_id:
+                    result = self.db.query(Routine).filter(
+                        Routine.id == int(routine_id)
+                    ).update({Routine.order: int(new_order)})
+                    updated_count += result
+                    logging.debug(f"Updated routine {routine_id} order to {new_order}: {result} rows affected")
+
+            self.db.commit()
+            logging.info(f"Successfully updated {updated_count} routine orders out of {len(routines)} requested")
+            return True
+        except Exception as e:
+            logging.error(f"Error updating routines order: {str(e)}")
+            self.db.rollback()
+            return False
+
+    def update_routine_item(self, routine_id: int, routine_item_id: str, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update a specific routine item."""
+        try:
+            # Find the routine item by routine_id and routine_item_id (Column A)
+            routine_item = self.db.query(RoutineItem).filter(
+                and_(RoutineItem.routine_id == routine_id,
+                     RoutineItem.id == int(routine_item_id))
+            ).first()
+
+            if not routine_item:
+                return None
+
+            # Update the routine item (only allow certain fields to be updated)
+            # Preserve ID and order, allow updates to other fields like completed status, notes, etc.
+            if 'D' in item_data:  # Column D is completed status
+                routine_item.completed = item_data['D'] == 'TRUE'
+
+            # Add other updateable fields as needed
+            # For now, we mainly support completion status updates
+
+            self.db.commit()
+
+            # Return updated item in sheets format
+            return self._routine_item_to_sheets_format(routine_item)
+        except Exception:
+            self.db.rollback()
+            return None
+
+    def mark_item_complete(self, routine_id: int, routine_item_id: int, completed: bool = True) -> bool:
         """Mark a routine item as completed or not."""
-        # CRITICAL: item_id parameter is actually a Google Sheets ItemID (string like "139")
-        # We need to convert it to the database primary key
-        item = self.db.query(Item).filter(Item.item_id == str(item_id)).first()
-        if not item:
-            return False  # Item not found
-        
-        # Use the database primary key for the query
-        db_item_id = item.id
-        
+        # CRITICAL: routine_item_id parameter is the RoutineItem ID (Column A), not the Item ID
+        # Frontend passes routineItem['A'] which is the RoutineItem's database primary key
         routine_item = self.db.query(RoutineItem).filter(
-            and_(RoutineItem.routine_id == routine_id, RoutineItem.item_id == db_item_id)
+            and_(RoutineItem.routine_id == routine_id, RoutineItem.id == routine_item_id)
         ).first()
-        
+
         if routine_item:
             routine_item.completed = completed
             self.db.commit()

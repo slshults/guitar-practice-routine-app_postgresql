@@ -109,35 +109,24 @@ export const useRoutineEditor = (routineId = null, initialRoutineDetails = null,
       }));
 
 
-      const response = await fetch(`/api/routines/${routineId}/order`, {
+      const url = `/api/routines/${routineId}/order`;
+
+      const response = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(routineEntries)
       });
+
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         console.error('Order update failed:', errorData);
         throw new Error(errorData.message || 'Failed to update routine order');
       }
-      
-      // Update local state with full item details
-      setSelectedItems(prev => {
-        const updated = [...prev];
-        items.forEach(item => {
-          const idx = updated.findIndex(i => i.routineEntry['A'] === item['A']);
-          if (idx !== -1) {
-            updated[idx] = {
-              ...updated[idx],
-              routineEntry: {
-                ...updated[idx].routineEntry,
-                'C': item['C']
-              }
-            };
-          }
-        });
-        return updated;
-      });
+
+
+      // Refresh the routine to get updated items from server
+      await fetchRoutine();
 
       return true;
     } catch (err) {

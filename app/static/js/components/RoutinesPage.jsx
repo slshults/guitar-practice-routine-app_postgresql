@@ -42,7 +42,7 @@ const SortableItem = React.memo(({ item, itemDetails }) => {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item['A'] });
+  } = useSortable({ id: item.routineEntry?.['A'] || item['A'] });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -62,9 +62,9 @@ const SortableItem = React.memo(({ item, itemDetails }) => {
         <div {...attributes} {...listeners}>
           <GripVertical className="h-5 w-5 text-gray-500 mr-4 cursor-move" />
         </div>
-        <span className="text-lg">{itemDetails?.['C'] || `Item ${item['B']}`}</span>
+        <span className="text-lg">{itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`}</span>
       </div>
-      {item['D'] === 'TRUE' && (
+      {(item.routineEntry?.['D'] || item['D']) === 'TRUE' && (
         <CheckCircle2 className="h-5 w-5 text-green-500" />
       )}
     </div>
@@ -295,7 +295,7 @@ const RoutinesPage = () => {
       id: routine.ID,
       name: routine.name,
       items: activeRoutineItems.map(item => ({
-        routineEntry: item,
+        routineEntry: item.routineEntry || item,  // Extract actual routineEntry or fallback to item
         itemDetails: item.itemDetails
       }))
     } : null;
@@ -308,9 +308,32 @@ const RoutinesPage = () => {
     setIsEditOpen(true);
   }, [activeRoutineItems, fetchItemsIfNeeded]);
 
-  const handleRoutineChange = useCallback(() => {
-    fetchRoutines();
-  }, [fetchRoutines]);
+  const handleRoutineChange = useCallback(async () => {
+    await fetchRoutines();
+    // Call fetchActiveRoutineItems directly without dependency to avoid circular reference
+    const activeRoutine = routines.find(r => r.active);
+
+    if (!activeRoutine) {
+      setActiveRoutineItems([]);
+      return;
+    }
+
+    // Fetch the routine with all details
+    const routineResponse = await fetch(`/api/routines/${activeRoutine.ID}`);
+    if (routineResponse.ok) {
+      const routineData = await routineResponse.json();
+
+      // Sort items by order (order is stored in routineEntry.C)
+      const sortedItems = routineData.items
+        .sort((a, b) => parseInt(a.routineEntry['C']) - parseInt(b.routineEntry['C']))
+        .map(item => ({
+          ...item,
+          itemDetails: item.itemDetails || item
+        }));
+
+      setActiveRoutineItems(sortedItems);
+    }
+  }, [fetchRoutines, routines]);
 
   const fetchActiveRoutineItems = useCallback(async () => {
     try {
@@ -327,9 +350,9 @@ const RoutinesPage = () => {
       if (!routineResponse.ok) throw new Error('Failed to fetch routine details');
       const routineData = await routineResponse.json();
       
-      // Sort items by order
+      // Sort items by order (order is stored in routineEntry.C)
       const sortedItems = routineData.items
-        .sort((a, b) => parseInt(a['C']) - parseInt(b['C']))
+        .sort((a, b) => parseInt(a.routineEntry['C']) - parseInt(b.routineEntry['C']))
         .map(item => ({
           ...item,
           itemDetails: item.itemDetails || item
@@ -350,8 +373,9 @@ const RoutinesPage = () => {
   const handleDragEnd = async ({ active, over }) => {
     if (!active || !over || active.id === over.id) return;
 
-    const oldIndex = activeRoutineItems.findIndex(item => item['A'] === active.id);
-    const newIndex = activeRoutineItems.findIndex(item => item['A'] === over.id);
+    const oldIndex = activeRoutineItems.findIndex(item => (item.routineEntry?.['A'] || item['A']) === active.id);
+    const newIndex = activeRoutineItems.findIndex(item => (item.routineEntry?.['A'] || item['A']) === over.id);
+
 
     try {
       // First get the active routine ID
@@ -359,32 +383,40 @@ const RoutinesPage = () => {
       if (!response.ok) throw new Error('Failed to fetch active routine');
       const data = await response.json();
       const activeId = data.A; // Use Google Sheets format (Column A)
-      
+
+
       if (!activeId) {
         throw new Error('No active routine found');
       }
 
       // Create new array with moved item
       const reordered = arrayMove(activeRoutineItems, oldIndex, newIndex);
-      
+
       // Update all orders to match new positions, keeping only essential columns
       const withNewOrder = reordered.map((item, index) => ({
-        'A': item['A'],           // ID (routine entry ID)
+        'A': item.routineEntry?.['A'] || item['A'],           // ID (routine entry ID)
         'C': index.toString(),    // Order
       }));
-      
+
+
       // Update UI optimistically
       setActiveRoutineItems(reordered);
-      
+
       // Send update to backend using the active routine ID as sheet name
-      const orderResponse = await fetch(`/api/routines/${activeId}/items/order`, {
+      const orderUrl = `/api/routines/${activeId}/order`;
+
+      const orderResponse = await fetch(orderUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(withNewOrder)
       });
-      
-      if (!orderResponse.ok) throw new Error('Failed to update routine order');
-      
+
+      if (!orderResponse.ok) {
+        const errorText = await orderResponse.text();
+        throw new Error(`Failed to update routine order: ${errorText}`);
+      }
+
+
       // Refresh items to ensure sync
       await fetchActiveRoutineItems();
     } catch (error) {
@@ -559,13 +591,13 @@ const RoutinesPage = () => {
                     onDragEnd={handleDragEnd}
                   >
                     <SortableContext
-                      items={activeRoutineItems.map(item => item['A'])}
+                      items={activeRoutineItems.map(item => item.routineEntry?.['A'] || item['A'])}
                       strategy={verticalListSortingStrategy}
                     >
                       <div className="space-y-2 mt-4">
                         {activeRoutineItems.map((item) => (
                           <SortableItem
-                            key={item['A']}
+                            key={item.routineEntry?.['A'] || item['A']}
                             item={item}
                             itemDetails={item.itemDetails}
                           />
@@ -617,11 +649,11 @@ const RoutinesPage = () => {
                     onDragEnd={handleDragEndInactive}
                   >
                     <SortableContext
-                      items={inactiveRoutines.map(routine => routine.ID)}
+                      items={inactiveRoutines.map(routine => routine.ID).filter(id => id != null)}
                       strategy={verticalListSortingStrategy}
                     >
                       <div className="space-y-2">
-                        {inactiveRoutines.map((routine) => (
+                        {inactiveRoutines.filter(routine => routine.ID != null).map((routine) => (
                           <SortableInactiveRoutine
                             key={routine.ID}
                             routine={routine}

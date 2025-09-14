@@ -373,18 +373,37 @@ class DataLayer:
             return routine_service.remove_item_from_routine(routine_id, item_id)
         else:
             return sheets.remove_item_from_routine(routine_id, item_id)
+
+    def remove_routine_item_by_id(self, routine_id: int, routine_item_id: int) -> bool:
+        if self.mode == 'postgres':
+            return routine_service.remove_routine_item_by_id(routine_id, routine_item_id)
+        else:
+            # For sheets mode, the routine_item_id would be the routine entry ID
+            return sheets.remove_item_from_routine(routine_id, routine_item_id)
     
     def update_routine_items_order(self, routine_id: int, items: List[Dict[str, Any]]) -> bool:
         if self.mode == 'postgres':
             return routine_service.update_routine_items_order(routine_id, items)
         else:
             return sheets.update_routine_items_order(routine_id, items)
-    
-    def mark_item_complete(self, routine_id: int, item_id: int, completed: bool = True) -> bool:
+
+    def update_routines_order(self, routines: List[Dict[str, Any]]) -> bool:
         if self.mode == 'postgres':
-            return routine_service.mark_item_complete(routine_id, item_id, completed)
+            return routine_service.update_routines_order(routines)
         else:
-            return sheets.mark_routine_item_complete(routine_id, item_id, completed)
+            return sheets.update_routines_order(routines)
+
+    def update_routine_item(self, routine_id: int, routine_item_id: str, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if self.mode == 'postgres':
+            return routine_service.update_routine_item(routine_id, routine_item_id, item_data)
+        else:
+            return sheets.update_routine_item(routine_id, routine_item_id, item_data)
+
+    def mark_item_complete(self, routine_id: int, routine_item_id: int, completed: bool = True) -> bool:
+        if self.mode == 'postgres':
+            return routine_service.mark_item_complete(routine_id, routine_item_id, completed)
+        else:
+            return sheets.mark_routine_item_complete(routine_id, routine_item_id, completed)
     
     def reset_routine_progress(self, routine_id: int) -> bool:
         if self.mode == 'postgres':

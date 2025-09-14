@@ -595,29 +595,62 @@ def routine_items(routine_id):
             app.logger.error(f"Error adding item to routine: {str(e)}", exc_info=True)
             return jsonify({"error": f"Failed to add item to routine: {str(e)}"}), 500
 
-@app.route('/api/routines/<int:routine_id>/items/<int:item_id>', methods=['DELETE'])
+@app.route('/api/routines/<int:routine_id>/items/<item_id>', methods=['DELETE'])
 def routine_item(routine_id, item_id):
-    """Remove an item from a routine"""
-    success = data_layer.remove_item_from_routine(routine_id, item_id)
+    """Remove an item from a routine by routine item ID (matches sheets version)"""
+    # Convert item_id to int since it's actually the routine entry ID
+    routine_item_id = int(item_id)
+    success = data_layer.remove_routine_item_by_id(routine_id, routine_item_id)
     return jsonify({"success": success})
+
+# Routine ordering (for main routines list drag-and-drop)
+@app.route('/api/routines/order', methods=['PUT'])
+def update_routines_order():
+    """Update the order of routines in the main routines list"""
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    try:
+        updates = request.json
+        app.logger.info(f"Updating routines order with: {updates}")
+        success = data_layer.update_routines_order(updates)
+        return jsonify({"success": success})
+    except Exception as e:
+        app.logger.error(f"Error updating routines order: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/routines/<int:routine_id>/items/order', methods=['PUT'])
 def update_routine_items_order(routine_id):
     """Update routine item ordering"""
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-    
+
+    app.logger.info(f"Updating routine {routine_id} items order with data: {request.json}")
+    try:
+        success = data_layer.update_routine_items_order(routine_id, request.json)
+        app.logger.info(f"DataLayer returned success: {success}")
+        return jsonify({"success": success})
+    except Exception as e:
+        app.logger.error(f"Error in routine items order endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/routines/<int:routine_id>/order', methods=['PUT'])
+def update_routine_order_route(routine_id):
+    """Update routine item ordering (alternative endpoint to match sheets version)"""
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
     success = data_layer.update_routine_items_order(routine_id, request.json)
     return jsonify({"success": success})
 
-@app.route('/api/routines/<int:routine_id>/items/<int:item_id>/complete', methods=['PUT'])
-def mark_routine_item_complete(routine_id, item_id):
+@app.route('/api/routines/<int:routine_id>/items/<int:routine_item_id>/complete', methods=['PUT'])
+def mark_routine_item_complete(routine_id, routine_item_id):
     """Mark a routine item as completed or not"""
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-    
+
     completed = request.json.get('completed', True)
-    success = data_layer.mark_item_complete(routine_id, item_id, completed)
+    success = data_layer.mark_item_complete(routine_id, routine_item_id, completed)
     return jsonify({"success": success})
 
 @app.route('/api/routines/<int:routine_id>/reset', methods=['POST'])
@@ -666,18 +699,21 @@ def get_active_routine_lightweight():
     # Format the response to match what the frontend expects
     items_with_minimal_details = []
     for item in routine_with_items.get("items", []):
-        # item is already in the correct format with A, B, C, D keys from _routine_item_to_sheets_format
-        # and itemDetails from the service
+        # CRITICAL: item structure is {routineEntry: {...}, itemDetails: {...}}
+        # Need to access nested properties correctly
+        routine_entry = item.get("routineEntry", {})
+        item_details = item.get("itemDetails", {})
+
         items_with_minimal_details.append({
             "routineEntry": {
-                "A": item.get("A"),  # Routine item ID
-                "B": item.get("B"),  # Item ID
-                "C": item.get("C"),  # Order
-                "D": item.get("D")   # Completed status (already "TRUE"/"FALSE")
+                "A": routine_entry.get("A"),  # Routine item ID
+                "B": routine_entry.get("B"),  # Item ID (Google Sheets ItemID like "67")
+                "C": routine_entry.get("C"),  # Order
+                "D": routine_entry.get("D")   # Completed status (already "TRUE"/"FALSE")
             },
             "itemMinimal": {
-                "A": item.get("itemDetails", {}).get("A", ""),  # Item ID
-                "C": item.get("itemDetails", {}).get("C", "")   # Item title
+                "A": item_details.get("A", ""),  # Item ID
+                "C": item_details.get("C", "")   # Item title
             }
         })
     

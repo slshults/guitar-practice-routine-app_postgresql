@@ -254,19 +254,6 @@ Here's a map of the columns for our Items sheet and routine sheets.  This is wha
 
   - So, we're using an ID too look up the sheet, but that ID is actually a sheet name as well. Let me know of any questions.  We still have many changes to make for this, but I've found we're more effective if we fix it as we go, so we can test each change and keep things under control.
 
-IMPORTANT:
-- No need to run npm to update after changes, the server is running and we have watchers in place to make updates for us as needed while we're developing.
-
-- Please don't use `git` commands without discussing it together first. I usually prefer to run commits and pushes in and external terminal window. Thanks.
-
-- You often try `python` first, which doesn't work, so just start with `python3`
-
-- If we ask Opus 4 for debugging help, please remind them not to try to start the server because it's already running and watchers are taking care of updates.
-
-- NEVER delete spreadsheet items. If you think something needs to be deleted, check with me first. In actuality, you we probably just need to change an ID instead of deleting.
-
-- Contextual reminder: In guitar we count strings in order from high pitch to low, so the string on the right side of our charts is string one. Likewise with frets, so fret one is at the top, and when we go "up" a fret, that means the next fret downward on the chart
-
 ## SVGuitar Chord Chart Sizing
 
   The chord chart editor uses a three-part sizing system that must be kept
@@ -554,8 +541,17 @@ See `API_MISMATCH_CHECKLIST.md` in project root for comprehensive comparison bet
 - Wrong item names in dialogs
 - Filtering/sorting broken
 - API returns wrong data despite correct database content
+- **Drag and drop operations return HTTP 200 but don't persist** (SQL UPDATE affects 0 rows)
 
 **Fix Pattern**: Always use ItemIDs (Column B) for frontend communication, never database primary keys (Column A).
+
+**Debugging Pattern for Silent Persistence Failures:**
+```python
+# Add row count tracking to repository update methods
+result = self.db.query(Model).filter(...).update({...})
+if result == 0:
+    logging.warning(f"No rows updated - ID mismatch likely")
+```
 
 ### Common Repository/Model Attribute Issues
 **ChordChart Model**: Uses `order_col` (not `order`) and `chord_id` (not `id`) to match Google Sheets columns
@@ -564,5 +560,20 @@ See `API_MISMATCH_CHECKLIST.md` in project root for comprehensive comparison bet
 ### File Upload Patterns
 **Frontend sends**: `file0`, `file1`, etc. (not `'files'`)
 **Backend fix**: Use `request.files.values()` to capture all files regardless of key names
+
+IMPORTANT:
+- No need to run npm to update after changes, the server is running and we have watchers in place to make updates for us as needed while we're developing.
+
+- Please don't use `git` commands without discussing it together first. I usually prefer to run commits and pushes in and external terminal window. Thanks.
+
+- You often try `python` first, which doesn't work, so just start with `python3`
+
+- If we ask Opus 4 for debugging help, please remind them not to try to start the server because it's already running and watchers are taking care of updates.
+
+- We do not consider an item done, and we do not mark an item complete on a todo list, until it has been tested in the web GUI and confirmed to be working.
+
+- NEVER delete spreadsheet items. If you think something needs to be deleted, check with me first. In actuality, you we probably just need to change an ID instead of deleting.
+
+- Contextual reminder: In guitar we count strings in order from high pitch to low, so the string on the right side of our charts is string one. Likewise with frets, so fret one is at the top, and when we go "up" a fret, that means the next fret downward on the chart
 
 Anon, we rock n roll 🙌🤘🎸...

@@ -797,7 +797,34 @@ def update_routine_order(routine_id, items):
     except Exception as e:
         logging.error(f"Error in update_routine_order: {str(e)}")
         return existing_items  # Return original order on error
-    
+
+def update_routines_order(routines):
+    """Update the order of routines in the Routines sheet"""
+    try:
+        # Get the Routines sheet
+        spread = get_spread()
+        routines_sheet = spread.worksheet('Routines')
+
+        # Get existing routines
+        existing_routines = sheet_to_records(routines_sheet, is_routine_worksheet=True)
+
+        # Create a map of ID to new order
+        order_map = {update['A']: update['D'] for update in routines}
+
+        # Update orders for routines that are in the updates
+        for routine in existing_routines:
+            if routine['A'] in order_map:
+                routine['D'] = order_map[routine['A']]
+
+        # Write back to sheet
+        success = records_to_sheet(routines_sheet, existing_routines, is_routine_worksheet=True)
+        if success:
+            invalidate_caches()
+        return success
+    except Exception as e:
+        logging.error(f"Error updating routines order: {str(e)}")
+        return False
+
 def delete_routine(routine_id):
     """Delete a routine by ID."""
     try:

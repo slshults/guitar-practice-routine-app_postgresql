@@ -53,7 +53,7 @@ const SortableRoutineItem = React.memo(({ item, onRemove }) => {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item.routineEntry['A'] });
+  } = useSortable({ id: item.routineEntry?.['A'] || item['A'] });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -78,7 +78,7 @@ const SortableRoutineItem = React.memo(({ item, onRemove }) => {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => onRemove(item.routineEntry['A'])}
+        onClick={() => onRemove(item.routineEntry?.['A'] || item['A'])}
         className="text-red-500 hover:text-red-400"
       >
         <X className="h-4 w-4" />
@@ -128,28 +128,34 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
   );
 
   const handleDragEnd = async ({ active, over }) => {
-    
+
     if (active.id !== over?.id) {
-      
-      const oldIndex = selectedItems.findIndex(item => item.routineEntry['A'] === active.id);
-      const newIndex = selectedItems.findIndex(item => item.routineEntry['A'] === over.id);
-      
+
+      const oldIndex = selectedItems.findIndex(item => (item.routineEntry?.['A'] || item['A']) === active.id);
+      const newIndex = selectedItems.findIndex(item => (item.routineEntry?.['A'] || item['A']) === over.id);
+
+
       // Create new array with items in new positions
       const reordered = arrayMove(selectedItems, oldIndex, newIndex);
-      
+
       // Update all orders to match new positions
       const withNewOrder = reordered.map((item, index) => ({
-        'A': item.routineEntry['A'],  // ID
+        'A': item.routineEntry?.['A'] || item['A'],  // ID
         'C': index.toString()         // New order
       }));
-      
+
+
       // Update local state first for immediate UI feedback
       setSelectedItems(reordered);
-      
+
       if (routine?.id) {
         try {
-          
           await updateRoutineOrder(routine.id, withNewOrder);
+
+          // Notify parent component that routine was changed
+          if (onRoutineChange) {
+            onRoutineChange();
+          }
         } catch (error) {
           console.error('Failed to update routine order:', error);
           // Revert to previous state on error
@@ -279,13 +285,13 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
                 onDragEnd={handleDragEnd}
               >
                 <SortableContext
-                  items={selectedItems.map(item => item.routineEntry['A'])}
+                  items={selectedItems.map(item => item.routineEntry?.['A'] || item['A']).filter(id => id != null)}
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="space-y-4">
-                    {selectedItems.map((item) => (
+                    {selectedItems.filter(item => (item.routineEntry?.['A'] || item['A']) != null).map((item) => (
                       <SortableRoutineItem
-                        key={item.routineEntry['A']}
+                        key={item.routineEntry?.['A'] || item['A']}
                         item={item}
                         onRemove={handleRemoveItem}
                       />

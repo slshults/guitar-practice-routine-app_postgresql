@@ -256,33 +256,20 @@ def update_routine_order_route(routine_id):
         app.logger.debug(f"Received order update request for routine: {routine_id}")
         items = request.json
         app.logger.debug(f"Items to reorder: {items}")
-        
-        # Get the worksheet using routine ID as sheet name
-        spread = get_spread()
-        worksheet = spread.worksheet(str(routine_id))
-        app.logger.debug(f"Found worksheet for routine: {routine_id}")
-        
-        # Get existing items to preserve all data
-        existing_items = sheet_to_records(worksheet, is_routine_worksheet=True)
-        app.logger.debug(f"Existing items: {existing_items}")
-        
-        # Create a map of routine entry IDs to their new order
-        new_orders = {item['A']: item['C'] for item in items}
-        app.logger.debug(f"New orders map: {new_orders}")
-        
-        # Update only the order (column C) for each item
-        for item in existing_items:
-            if item['A'] in new_orders:
-                item['C'] = new_orders[item['A']]
-                
-        # Write back to sheet
-        success = records_to_sheet(worksheet, existing_items, is_routine_worksheet=True)
+
+        # Use DataLayer for unified data access
+        data_layer = DataLayer()
+        success = data_layer.update_routine_items_order(routine_id, items)
+
         if success:
             app.logger.debug(f"Successfully updated order for routine: {routine_id}")
-            return jsonify(existing_items)
-            
-        app.logger.error(f"Failed to write updated order to sheet for routine: {routine_id}")
-        return jsonify({"error": "Failed to update order"}), 500
+            # Get updated routine items to return
+            updated_items = data_layer.get_routine_items(routine_id)
+            return jsonify(updated_items)
+        else:
+            app.logger.error(f"Failed to update routine items order for routine: {routine_id}")
+            return jsonify({"error": "Failed to update routine items order"}), 500
+
     except Exception as e:
         app.logger.error(f"Error updating routine order: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -292,16 +279,25 @@ def routine_item(routine_id, item_id):
     """Handle updates and deletions of routine items"""
     try:
         if request.method == 'DELETE':
-            success = remove_from_routine(routine_id, item_id)
+            # Use DataLayer for PostgreSQL compatibility
+            from app.data_layer import DataLayer
+            data_layer = DataLayer()
+
+            success = data_layer.remove_routine_item_by_id(routine_id, int(item_id))
             if success:
                 return jsonify({"success": True})
             return jsonify({"error": "Failed to remove item"}), 500
         elif request.method == 'PUT':
             if not request.is_json:
                 return jsonify({"error": "Request must be JSON"}), 400
-                
+
             item = request.json
-            result = update_routine_item(routine_id, item_id, item)
+
+            # Use DataLayer for PostgreSQL compatibility
+            from app.data_layer import DataLayer
+            data_layer = DataLayer()
+
+            result = data_layer.update_routine_item(routine_id, item_id, item)
             if result:
                 return jsonify(result)
             return jsonify({"error": "Failed to update item"}), 500
@@ -1029,40 +1025,19 @@ def update_routines_order():
         app.logger.debug("Received routines order update request")
         updates = request.json
         app.logger.debug(f"Updates to apply: {updates}")
-        
-        # Wrap the entire operation in retry logic
-        def do_update():
-            # Get the Routines sheet
-            spread = get_spread()
-            routines_sheet = spread.worksheet('Routines')
-            
-            # Get existing routines
-            existing_routines = sheet_to_records(routines_sheet, is_routine_worksheet=True)
-            
-            # Create a map of ID to new order
-            order_map = {update['A']: update['D'] for update in updates}
-            
-            # Update orders for routines that are in the updates
-            for routine in existing_routines:
-                if routine['A'] in order_map:
-                    routine['D'] = order_map[routine['A']]
-            
-            # Write back to sheet
-            success = records_to_sheet(routines_sheet, existing_routines, is_routine_worksheet=True)
-            
-            if not success:
-                raise Exception("Failed to write updated order to sheet")
-                
-            return success
-        
-        # Use retry logic with exponential backoff
-        from app.sheets import retry_on_rate_limit
-        success = retry_on_rate_limit(do_update, max_retries=3, base_delay=2)
-        
+
+        # Use DataLayer for PostgreSQL compatibility
+        from app.data_layer import DataLayer
+        data_layer = DataLayer()
+
+        success = data_layer.update_routines_order(updates)
+
         if success:
             app.logger.debug("Successfully updated routines order")
             return jsonify({"success": True})
-            
+        else:
+            raise Exception("Failed to update routines order")
+
     except Exception as e:
         app.logger.error(f"Error updating routines order: {str(e)}")
         error_str = str(e).lower()

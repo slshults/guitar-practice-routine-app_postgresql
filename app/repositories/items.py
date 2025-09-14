@@ -45,9 +45,10 @@ class ItemRepository(BaseRepository):
         """Batch update item ordering."""
         try:
             for item_data in items:
-                item_id = int(item_data['A'])
+                # Column A contains the Google Sheets ItemID, not the database primary key
+                sheets_item_id = str(item_data['A'])
                 new_order = int(item_data.get('G', 0)) if item_data.get('G') else 0
-                self.db.query(Item).filter(Item.id == item_id).update({
+                self.db.query(Item).filter(Item.item_id == sheets_item_id).update({
                     Item.order: new_order
                 })
             self.db.commit()
