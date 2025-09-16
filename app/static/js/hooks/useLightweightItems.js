@@ -6,10 +6,10 @@ export const useLightweightItems = () => {
   const [error, setError] = useState(null);
   const [version, setVersion] = useState(0);
 
-  // Fetch only ID and Title for the items list
+  // Fetch full item data for drag and drop support
   const fetchLightweightItems = async () => {
     try {
-      const response = await fetch('/api/items/lightweight');
+      const response = await fetch('/api/items');
       if (!response.ok) {
         throw new Error('Failed to fetch items');
       }

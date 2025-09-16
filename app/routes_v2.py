@@ -141,17 +141,28 @@ def update_chord_charts_order(item_id):
     success = data_layer.update_chord_charts_order(item_id, request.json)
     return jsonify({"success": success})
 
+# Item-specific chord chart deletion (supports sharing)
+@app.route('/api/items/<int:item_id>/chord-charts/<int:chart_id>', methods=['DELETE'])
+def delete_chord_chart_from_item(item_id, chart_id):
+    """Delete a chord chart from a specific item (handles sharing properly)"""
+    try:
+        success = data_layer.delete_chord_chart_from_item(item_id, chart_id)
+        return jsonify({"success": success})
+    except Exception as e:
+        app.logger.error(f"Error deleting chord chart {chart_id} from item {item_id}: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 # Batch chord chart operations
 @app.route('/api/items/<int:item_id>/chord-charts/batch', methods=['POST'])
 def batch_add_chord_charts(item_id):
     """Create multiple chord charts at once"""
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
-        
+
     chord_charts_data = request.json
     if not isinstance(chord_charts_data, list):
         return jsonify({"error": "Request must be a list of chord charts"}), 400
-    
+
     results = data_layer.batch_add_chord_charts(item_id, chord_charts_data)
     return jsonify(results)
 
@@ -164,16 +175,23 @@ def batch_delete_chord_charts():
         
         data = request.json
         chord_ids = data.get('chord_ids', [])
-        
+        item_id = data.get('item_id')  # Optional item context for sharing-aware deletion
+
+        app.logger.info(f"DEBUG: Received batch delete request - data: {data}")
+        app.logger.info(f"DEBUG: chord_ids: {chord_ids}, item_id: {item_id}")
+
         if not chord_ids:
             return jsonify({"error": "No chord IDs provided"}), 400
-        
+
         if not isinstance(chord_ids, list):
             return jsonify({"error": "chord_ids must be an array"}), 400
-        
-        app.logger.info(f"Batch deleting chord charts: {chord_ids}")
-        
-        result = data_layer.batch_delete_chord_charts(chord_ids)
+
+        if item_id:
+            app.logger.info(f"Batch deleting chord charts {chord_ids} from item {item_id} (sharing-aware)")
+        else:
+            app.logger.info(f"Batch deleting chord charts: {chord_ids} (complete deletion)")
+
+        result = data_layer.batch_delete_chord_charts(chord_ids, item_id)
         
         if result['success']:
             app.logger.info(f"Successfully batch deleted {result['deleted_count']} chord charts")
@@ -595,13 +613,34 @@ def routine_items(routine_id):
             app.logger.error(f"Error adding item to routine: {str(e)}", exc_info=True)
             return jsonify({"error": f"Failed to add item to routine: {str(e)}"}), 500
 
-@app.route('/api/routines/<int:routine_id>/items/<item_id>', methods=['DELETE'])
+@app.route('/api/routines/<int:routine_id>/items/<item_id>', methods=['PUT', 'DELETE'])
 def routine_item(routine_id, item_id):
-    """Remove an item from a routine by routine item ID (matches sheets version)"""
-    # Convert item_id to int since it's actually the routine entry ID
+    """Handle PUT (update) and DELETE for routine items"""
     routine_item_id = int(item_id)
-    success = data_layer.remove_routine_item_by_id(routine_id, routine_item_id)
-    return jsonify({"success": success})
+
+    if request.method == 'PUT':
+        if not request.is_json:
+            return jsonify({"error": "Request must be JSON"}), 400
+
+        update_data = request.json
+        app.logger.info(f"Updating routine item {routine_item_id} in routine {routine_id} with data: {update_data}")
+
+        try:
+            updated_item = data_layer.update_routine_item(routine_id, routine_item_id, update_data)
+            if updated_item:
+                app.logger.info(f"Successfully updated routine item {routine_item_id}")
+                return jsonify(updated_item)
+            else:
+                app.logger.warning(f"Routine item {routine_item_id} not found")
+                return jsonify({"error": "Routine item not found"}), 404
+        except Exception as e:
+            app.logger.error(f"Error updating routine item: {str(e)}")
+            return jsonify({"error": str(e)}), 500
+
+    elif request.method == 'DELETE':
+        """Remove an item from a routine by routine item ID (matches sheets version)"""
+        success = data_layer.remove_routine_item_by_id(routine_id, routine_item_id)
+        return jsonify({"success": success})
 
 # Routine ordering (for main routines list drag-and-drop)
 @app.route('/api/routines/order', methods=['PUT'])
@@ -641,7 +680,12 @@ def update_routine_order_route(routine_id):
         return jsonify({"error": "Request must be JSON"}), 400
 
     success = data_layer.update_routine_items_order(routine_id, request.json)
-    return jsonify({"success": success})
+    if success:
+        # Match sheets version: return updated items array
+        updated_items = data_layer.get_routine_items(routine_id)
+        return jsonify(updated_items)
+    else:
+        return jsonify({"error": "Failed to update order"}), 500
 
 @app.route('/api/routines/<int:routine_id>/items/<int:routine_item_id>/complete', methods=['PUT'])
 def mark_routine_item_complete(routine_id, routine_item_id):
@@ -833,16 +877,33 @@ def search_common_chords():
                     # Parse the chord_data JSON and flatten it to top level
                     import json
                     chord_data = json.loads(row[3]) if isinstance(row[3], str) else row[3]
-                    
-                    # Flatten chord data to top level for frontend compatibility  
+
+                    # Normalize finger data from objects to arrays (same as sheets version)
+                    raw_fingers = chord_data.get('fingers', [])
+                    normalized_fingers = []
+
+                    for finger in raw_fingers:
+                        if isinstance(finger, dict):
+                            string_num = finger.get('string')
+                            fret_num = finger.get('fret')
+                            finger_num = finger.get('finger')
+                            if string_num is not None and fret_num is not None:
+                                if finger_num is not None:
+                                    normalized_fingers.append([string_num, fret_num, finger_num])
+                                else:
+                                    normalized_fingers.append([string_num, fret_num])
+                        elif isinstance(finger, list) and len(finger) >= 2:
+                            normalized_fingers.append(finger)
+
+                    # Flatten chord data to top level for frontend compatibility
                     chord_obj = {
                         "id": row[0],
-                        "type": row[1], 
+                        "type": row[1],
                         "title": row[2],  # Frontend expects 'title' not 'name'
                         "created_at": row[4],
                         "order": row[5],
-                        # Flatten chord data properties to top level
-                        "fingers": chord_data.get("fingers", []),
+                        # Use normalized finger data instead of raw
+                        "fingers": normalized_fingers,
                         "barres": chord_data.get("barres", []),
                         "openStrings": chord_data.get("openStrings", []),
                         "mutedStrings": chord_data.get("mutedStrings", []),
@@ -872,16 +933,33 @@ def search_common_chords():
                 # Parse the chord_data JSON and flatten it to top level
                 import json
                 chord_data = json.loads(row[3]) if isinstance(row[3], str) else row[3]
-                
-                # Flatten chord data to top level for frontend compatibility  
+
+                # Normalize finger data from objects to arrays (same as sheets version)
+                raw_fingers = chord_data.get('fingers', [])
+                normalized_fingers = []
+
+                for finger in raw_fingers:
+                    if isinstance(finger, dict):
+                        string_num = finger.get('string')
+                        fret_num = finger.get('fret')
+                        finger_num = finger.get('finger')
+                        if string_num is not None and fret_num is not None:
+                            if finger_num is not None:
+                                normalized_fingers.append([string_num, fret_num, finger_num])
+                            else:
+                                normalized_fingers.append([string_num, fret_num])
+                    elif isinstance(finger, list) and len(finger) >= 2:
+                        normalized_fingers.append(finger)
+
+                # Flatten chord data to top level for frontend compatibility
                 chord_obj = {
                     "id": row[0],
-                    "type": row[1], 
+                    "type": row[1],
                     "title": row[2],  # Frontend expects 'title' not 'name'
                     "created_at": row[4],
                     "order": row[5],
-                    # Flatten chord data properties to top level
-                    "fingers": chord_data.get("fingers", []),
+                    # Use normalized finger data instead of raw
+                    "fingers": normalized_fingers,
                     "barres": chord_data.get("barres", []),
                     "openStrings": chord_data.get("openStrings", []),
                     "mutedStrings": chord_data.get("mutedStrings", []),
@@ -1007,8 +1085,7 @@ If you can't determine sections, use "Main" as the section name."""
                 if chords:
                     # Load CommonChords for lookup
                     app.logger.info("[AUTOCREATE] Loading CommonChords for chord shape lookup")
-                    from app.sheets import get_common_chords_efficiently
-                    common_chords = get_common_chords_efficiently()
+                    common_chords = data_layer.get_common_chords_efficiently()
                     
                     # Create lookup dictionary by chord name
                     chord_lookup = {}

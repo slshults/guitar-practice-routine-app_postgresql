@@ -359,6 +359,27 @@ const RoutinesPage = () => {
         }));
       
       setActiveRoutineItems(sortedItems);
+
+      // Log the loaded items structure
+      fetch('/api/debug/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `LOAD: Active routine items loaded: ${sortedItems.length} items`,
+          level: 'info'
+        })
+      });
+
+      if (sortedItems.length > 0) {
+        fetch('/api/debug/log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: `LOAD: Sortable IDs: ${sortedItems.map(item => item.routineEntry?.['A'] || item['A']).join(', ')}`,
+            level: 'info'
+          })
+        });
+      }
     } catch (error) {
       console.error('Error fetching routine items:', error);
       setError(error.message);
@@ -371,10 +392,39 @@ const RoutinesPage = () => {
 
 
   const handleDragEnd = async ({ active, over }) => {
-    if (!active || !over || active.id === over.id) return;
+    // Simple sync logging
+    fetch('/api/debug/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `ACTIVE ROUTINE handleDragEnd called: active=${active?.id}, over=${over?.id}`,
+        level: 'info'
+      })
+    });
+
+    if (!active || !over || active.id === over.id) {
+      fetch('/api/debug/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: 'ACTIVE ROUTINE Drag end early return - no valid drag',
+          level: 'info'
+        })
+      });
+      return;
+    }
 
     const oldIndex = activeRoutineItems.findIndex(item => (item.routineEntry?.['A'] || item['A']) === active.id);
     const newIndex = activeRoutineItems.findIndex(item => (item.routineEntry?.['A'] || item['A']) === over.id);
+
+    fetch('/api/debug/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `ACTIVE ROUTINE Indices: old=${oldIndex}, new=${newIndex}, activeId=${active.id}, overId=${over.id}`,
+        level: 'info'
+      })
+    });
 
 
     try {
@@ -449,6 +499,16 @@ const RoutinesPage = () => {
   }, [fetchRoutines]);
 
   const handleDragEndInactive = ({ active, over }) => {
+    // Log inactive routines drag event
+    fetch('/api/debug/log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: `INACTIVE ROUTINES handleDragEnd called: active=${active?.id}, over=${over?.id}`,
+        level: 'info'
+      })
+    });
+
     if (!active || !over || active.id === over.id) return;
 
     const oldIndex = inactiveRoutines.findIndex(routine => routine.ID === active.id);
@@ -588,6 +648,16 @@ const RoutinesPage = () => {
                   <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
+                    onDragStart={(event) => {
+                      fetch('/api/debug/log', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          message: `ACTIVE ROUTINE Drag started: ${event.active.id}`,
+                          level: 'info'
+                        })
+                      });
+                    }}
                     onDragEnd={handleDragEnd}
                   >
                     <SortableContext

@@ -249,13 +249,13 @@ class RoutineRepository(BaseRepository):
     
     def _routine_item_to_sheets_format(self, routine_item: RoutineItem) -> Dict[str, Any]:
         """Convert SQLAlchemy RoutineItem to Sheets API format."""
-        # CRITICAL: Column B must contain the Google Sheets ItemID (items.item_id), 
+        # CRITICAL: Column B must contain the Google Sheets ItemID (items.item_id),
         # NOT the database primary key (routine_items.item_id)
-        
+
         # Get the actual ItemID string from the Items table
         item = self.db.query(Item).filter(Item.id == routine_item.item_id).first()
         item_id_str = item.item_id if item and item.item_id else str(routine_item.item_id)
-        
+
         return {
             'A': str(routine_item.id),  # RoutineItem ID
             'B': item_id_str,  # Google Sheets ItemID (e.g., "107", not 106)

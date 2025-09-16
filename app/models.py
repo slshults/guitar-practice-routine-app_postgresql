@@ -104,24 +104,18 @@ class ChordChart(Base):
 
 class CommonChord(Base):
     __tablename__ = 'common_chords'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    title = Column(String(255), nullable=False, index=True)  # Chord name for lookups
-    chord_data = Column(JSON, nullable=False)  # SVGuitar JSON data
-    tuning = Column(String(50), index=True)  # For tuning-specific lookups
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Additional metadata from CommonChords sheet
-    category = Column(String(100), index=True)  # Basic, Advanced, Jazz, etc.
-    difficulty = Column(Integer, default=1, index=True)  # 1-5 scale
-    
-    __table_args__ = (
-        Index('idx_common_chord_title_tuning', 'title', 'tuning'),
-        Index('idx_common_chord_category', 'category'),
-    )
+
+    id = Column(Integer, primary_key=True)
+    type = Column(Text)
+    name = Column(Text)  # Chord name (e.g., 'G', 'C', 'Am') - matches database structure
+    chord_data = Column(JSON)  # JSON with fingers, barres, tuning, etc.
+    created_at = Column(DateTime)
+    order_col = Column(Integer)
+    unused1 = Column(Text)
+    unused2 = Column(Text)
 
     def __repr__(self):
-        return f"<CommonChord {self.id}: {self.title} ({self.tuning})>"
+        return f"<CommonChord {self.id}: {self.name}>"
 
 class ActiveRoutine(Base):
     __tablename__ = 'active_routine'

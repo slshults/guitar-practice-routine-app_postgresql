@@ -21,6 +21,7 @@ except ImportError:
 try:
     from app.services.items import ItemService
     from app.services.chord_charts import ChordChartService
+    from app.services.common_chords import CommonChordService
     from app.services.routines import routine_service
     from app.repositories.items import ItemRepository
     from app.database import DatabaseTransaction
@@ -302,19 +303,49 @@ class DataLayer:
             return service.delete_chord_chart(chart_id)
         else:
             return sheets.delete_chord_chart(chart_id)
-    
-    def batch_delete_chord_charts(self, chord_ids: List[int]) -> Dict[str, Any]:
-        """Delete multiple chord charts by IDs in a single transaction."""
+
+    def delete_chord_chart_from_item(self, item_id: int, chart_id: int) -> bool:
+        """Delete a chord chart from a specific item (handles comma-separated sharing properly)"""
         if self.mode == 'postgres':
-            from app.repositories.chord_charts import ChordChartRepository
-            with DatabaseTransaction() as db:
-                repo = ChordChartRepository(db)
-                deleted_count = repo.batch_delete(chord_ids)
+            service = ChordChartService()
+            return service.delete_chord_chart_from_item(str(item_id), chart_id)
+        else:
+            # For sheets mode, context matters - need to implement sharing logic
+            return sheets.delete_chord_chart_from_item(item_id, chart_id)
+    
+    def batch_delete_chord_charts(self, chord_ids: List[int], item_id: str = None) -> Dict[str, Any]:
+        """Delete multiple chord charts by IDs in a single transaction.
+
+        Args:
+            chord_ids: List of chord chart IDs to delete
+            item_id: Optional item context - if provided, uses sharing-aware deletion
+        """
+        if self.mode == 'postgres':
+            if item_id:
+                # Use sharing-aware deletion when item context is provided
+                service = ChordChartService()
+                deleted_count = 0
+
+                for chord_id in chord_ids:
+                    if service.delete_chord_chart_from_item(item_id, chord_id):
+                        deleted_count += 1
+
                 return {
                     "success": True,
-                    "deleted": chord_ids[:deleted_count],  # IDs that were actually deleted
+                    "deleted": chord_ids[:deleted_count],  # IDs that were processed
                     "deleted_count": deleted_count
                 }
+            else:
+                # Legacy behavior: complete deletion when no item context
+                from app.repositories.chord_charts import ChordChartRepository
+                with DatabaseTransaction() as db:
+                    repo = ChordChartRepository(db)
+                    deleted_count = repo.batch_delete(chord_ids)
+                    return {
+                        "success": True,
+                        "deleted": chord_ids[:deleted_count],  # IDs that were actually deleted
+                        "deleted_count": deleted_count
+                    }
         else:
             return sheets.batch_delete_chord_charts(chord_ids)
     
@@ -480,6 +511,20 @@ class DataLayer:
         else:
             # Fallback to sheets implementation
             return sheets.copy_chord_charts_to_items(source_item_id, target_item_ids)
+
+    def get_common_chords_efficiently(self) -> List[Dict[str, Any]]:
+        """Get all common chord charts efficiently for autocreate functionality."""
+        if self.mode == 'postgres':
+            # PostgreSQL implementation using CommonChordService
+            try:
+                common_chord_service = CommonChordService()
+                return common_chord_service.get_all_for_autocreate()
+            except Exception as e:
+                logging.error(f"PostgreSQL get_common_chords_efficiently failed: {e}")
+                return []
+        else:
+            # Fallback to sheets implementation
+            return sheets.get_common_chords_efficiently()
 
 # Global instance
 data_layer = DataLayer()

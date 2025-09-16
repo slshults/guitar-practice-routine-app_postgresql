@@ -1,6 +1,6 @@
 # Guitar Practice App - API Mismatch Checklist
 *PostgreSQL vs Sheets Version Comparison*
-*Last Updated: 2025-09-12*
+*Last Updated: 2025-09-14*
 
 ## ✅ MATCHED ROUTES (Working Correctly)
 
@@ -16,6 +16,7 @@
 | `/api/routines/<routine_id>/items` | GET, POST | `routine_items()` vs `add_routine_item()` (POST) | ⚠️ Consolidated vs separate |
 | `/api/routines/<routine_id>/items/<item_id>` | DELETE | `routine_item()` | ✅ Match |
 | `/api/routines/<routine_id>/items/order` | PUT | `update_routine_items_order()` | ✅ Match |
+| `/api/routines/<routine_id>/order` | PUT | `update_routine_order_route()` | ✅ Match |
 | `/api/routines/<routine_id>/items/<item_id>/complete` | PUT | `mark_routine_item_complete()` vs `toggle_item_complete()` | ⚠️ Function name differs |
 | `/api/routines/<routine_id>/reset` | POST | `reset_routine_progress()` | ✅ Match |
 | `/api/practice/active-routine` | GET, POST, DELETE | `active_routine()` vs `get_active_routine_with_details()` | ⚠️ Consolidated vs separate |
@@ -31,7 +32,7 @@
 | `/api/items/<item_id>/chord-charts` | GET, POST | `item_chord_charts()` | ✅ Match |
 | `/api/chord-charts/<int:chart_id>` | PUT, DELETE | `chord_chart()` | ✅ Match |
 | `/api/items/<item_id>/chord-charts/order` | PUT | `update_chord_charts_order()` | ✅ Match |
-| `/api/chord-charts/batch-delete` | POST | `batch_delete_chord_charts()` | ✅ Match |
+| `/api/chord-charts/batch-delete` | POST | `batch_delete_chord_charts()` | ✅ Match (SHARING BUG FIXED!) |
 | `/api/autocreate-chord-charts` | POST | `autocreate_chord_charts()` | ✅ Match |
 | `/api/items/<item_id>/notes` | GET, POST | `item_notes()` | ✅ Match |
 | `/api/routines/<routine_id>/details` | GET | `get_routine_with_details()` | ✅ Match |
@@ -42,7 +43,6 @@
 
 | Route | HTTP Methods | Function Name | Priority | Notes |
 |-------|-------------|---------------|----------|-------|
-| `/api/routines/<routine_id>/order` | PUT | `update_routine_order_route()` | MEDIUM | Routine ordering |
 | `/api/routines/<routine_id>/items/<item_id>` | PUT | `routine_item()` | MEDIUM | Update routine item |
 | `/items` | GET | `items_page()` | LOW | Page route |
 | `/test_sheets` | GET | `test_sheets()` | LOW | Testing route |
@@ -72,8 +72,7 @@
 ## 🎯 PRIORITY ACTION ITEMS
 
 ### MEDIUM Priority (Nice to Have)
-1. **`/api/routines/<routine_id>/order`** - Routine ordering
-2. **`/api/routines/<routine_id>/items/<item_id>`** (PUT) - Update routine item
+1. **`/api/routines/<routine_id>/items/<item_id>`** (PUT) - Update routine item
 
 ### LOW Priority (Development/Testing)
 3. Function name differences (mostly cosmetic)
@@ -82,9 +81,12 @@
 
 ## 📝 NOTES
 - Most core functionality is present and working
-- **MAJOR WINS**: 
+- **MAJOR WINS**:
   - ✅ Autocreate chord charts feature fully implemented! 🎸
   - ✅ Chord copy functionality fully implemented! 🎸
+  - ✅ Drag and drop for routine items fully fixed! 🎸
+  - ✅ Chord chart sharing deletion bug fixed! 🎸
+  - ✅ Routine item order persistence between pages fixed! 🎸
 - Only MEDIUM priority items remain - core app is fully functional
 - PostgreSQL version has additional system/migration utilities  
 - The app has achieved feature parity with the sheets version for all critical functionality

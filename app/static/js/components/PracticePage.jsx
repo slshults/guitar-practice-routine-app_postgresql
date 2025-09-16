@@ -344,6 +344,7 @@ export const PracticePage = () => {
   const [showDeleteChordsModal, setShowDeleteChordsModal] = useState(false);
   const [deleteModalItemId, setDeleteModalItemId] = useState(null);
   const [autocreateProgress, setAutocreateProgress] = useState({});
+  const [copyProgress, setCopyProgress] = useState(null);
   const [isDragActive, setIsDragActive] = useState({});
   const [showAutocreateZone, setShowAutocreateZone] = useState({});
   const [autocreateAbortController, setAutocreateAbortController] = useState({});
@@ -592,15 +593,21 @@ export const PracticePage = () => {
   };
 
   const deleteSection = async (itemId, sectionId) => {
+    // Validate itemId
+    if (!itemId) {
+      console.error('ERROR: deleteSection called with empty itemId', { itemId, sectionId });
+      return;
+    }
+
     // Prevent double-clicking/double-triggering
     const sectionKey = `${itemId}-${sectionId}`;
     if (deletingSection.has(sectionKey)) {
       console.log(`Delete already in progress for section ${sectionId}`);
       return;
     }
-    
+
     setDeletingSection(prev => new Set([...prev, sectionKey]));
-    
+
     try {
       // Get all chord charts in this section
       const chartsToDelete = (chordCharts[itemId] || []).filter(chart => 
@@ -619,14 +626,18 @@ export const PracticePage = () => {
       
       const chordIds = chartsToDelete.map(chart => chart.id);
       console.log(`Batch deleting ${chartsToDelete.length} chord charts from section ${sectionId}:`, chordIds);
-      
+      console.log(`DEBUG: Sending item_id=${itemId} to batch-delete endpoint`);
+
       // Use batch delete endpoint
       const response = await fetch('/api/chord-charts/batch-delete', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ chord_ids: chordIds })
+        body: JSON.stringify({
+          chord_ids: chordIds,
+          item_id: itemId  // Add item context for sharing-aware deletion
+        })
       });
 
       if (!response.ok) {
@@ -780,7 +791,10 @@ export const PracticePage = () => {
     if (selectedTargetItems.size > 0) {
       const itemsWithCharts = new Set();
       selectedTargetItems.forEach(itemId => {
-        const existingCharts = chordCharts[itemId] || [];
+        // itemId is the primary key (Column A), but chord charts are stored by ItemID (Column B)
+        const targetItem = allItems?.find(item => item['A'] === itemId);
+        const itemReferenceId = targetItem?.['B'];
+        const existingCharts = chordCharts[itemReferenceId] || [];
         if (existingCharts.length > 0) {
           itemsWithCharts.add(itemId);
         }
@@ -789,7 +803,7 @@ export const PracticePage = () => {
     } else {
       setItemsWithExistingCharts(new Set());
     }
-  }, [selectedTargetItems, chordCharts]);
+  }, [selectedTargetItems, chordCharts, allItems]);
   
   // Rotate processing messages every 10 seconds
   useEffect(() => {
@@ -1725,7 +1739,7 @@ export const PracticePage = () => {
     try {
       console.log('Deleting chord chart:', chordId, 'for item:', itemId);
       
-      const response = await fetch(`/api/chord-charts/${chordId}`, {
+      const response = await fetch(`/api/items/${itemId}/chord-charts/${chordId}`, {
         method: 'DELETE',
       });
 
@@ -1845,38 +1859,39 @@ export const PracticePage = () => {
   const handleOpenCopyModal = async (itemId) => {
     console.log('Opening copy modal for item:', itemId);
     setCopySourceItemId(itemId);
-    
+
     // Get source item details for fuzzy matching
     // itemId is the Item ID (Column B), but we need to find the actual item in allItems
     const sourceItem = allItems?.find(item => item['B'] === itemId);
     const sourceTitle = sourceItem?.['C'] || '';
-    
+
     // Find similar songs first
     const similarSongs = findSimilarSongs(sourceTitle, allItems, itemId);
     console.log('Source:', sourceTitle);
     console.log('Found similar songs:', similarSongs.map(s => s['C']));
-    
-    // Load chord charts only for the source item and similar songs  
-    const itemsToLoad = [itemId, ...similarSongs.map(s => s['A'])];
-    console.log('Loading chord charts for items:', itemsToLoad);
-    
+
+    // TARGETED APPROACH: Only load chord charts for source + similar songs (not all items)
+    // This matches the efficient approach from the working sheets version
+    const itemsToLoad = [itemId, ...similarSongs.map(s => s['B'])]; // Use ItemIDs (Column B)
+    console.log('Loading chord charts for relevant items:', itemsToLoad.length, 'items');
+
     for (const id of itemsToLoad) {
       try {
         const response = await fetch(`/api/items/${id}/chord-charts`);
         if (response.ok) {
           const charts = await response.json();
-          const transformedCharts = charts;
-          setChordCharts(prev => ({ ...prev, [id]: transformedCharts }));
-          console.log(`Loaded ${transformedCharts.length} charts for item ${id}`);
+          setChordCharts(prev => ({ ...prev, [id]: charts }));
+          console.log(`Loaded ${charts.length} charts for item ${id}`);
         }
       } catch (error) {
         console.error(`Error loading chord charts for item ${id}:`, error);
       }
     }
-    
+
     setShowCopyModal(true);
     setCopySearchTerm('');
     setSelectedTargetItems(new Set());
+    setCopyProgress(null);
   };
 
   const handleCloseCopyModal = () => {
@@ -1884,7 +1899,9 @@ export const PracticePage = () => {
     setCopySourceItemId(null);
     setCopySearchTerm('');
     setSelectedTargetItems(new Set());
+    setItemsWithExistingCharts(new Set());
     setShowOverwriteConfirmation(false);
+    setCopyProgress(null);
   };
 
   const handleToggleTargetItem = (itemId) => {
@@ -1894,6 +1911,13 @@ export const PracticePage = () => {
         newSet.delete(itemId);
       } else {
         newSet.add(itemId);
+        // Lazy load chord charts for this item if not already loaded (for overwrite detection)
+        // Note: itemId here is the primary key (Column A), but we need ItemID (Column B) for API
+        const targetItem = allItems?.find(item => item['A'] === itemId);
+        const itemReferenceId = targetItem?.['B'];
+        if (itemReferenceId) {
+          loadChordChartsForItem(itemReferenceId);
+        }
       }
       return newSet;
     });
@@ -1921,7 +1945,11 @@ export const PracticePage = () => {
         },
         body: JSON.stringify({
           source_item_id: copySourceItemId,
-          target_item_ids: Array.from(selectedTargetItems)
+          target_item_ids: Array.from(selectedTargetItems).map(primaryKey => {
+            // Convert primary key (Column A) to ItemID (Column B)
+            const targetItem = allItems?.find(item => item['A'] === primaryKey);
+            return targetItem?.['B'];
+          }).filter(Boolean) // Remove any undefined values
         })
       });
 
@@ -1932,8 +1960,16 @@ export const PracticePage = () => {
       const result = await response.json();
       console.log('Chord charts copied successfully:', result);
 
+      // Set copy progress to complete to show success message
+      setCopyProgress('complete');
+
       // Force refresh chord charts for all affected items using the proven autocreate pattern
-      const affectedItems = [copySourceItemId, ...Array.from(selectedTargetItems)];
+      // Convert primary keys (Column A) to ItemIDs (Column B) for targets, same as API call body
+      const targetItemIds = Array.from(selectedTargetItems).map(primaryKey => {
+        const targetItem = allItems?.find(item => item['A'] === primaryKey);
+        return targetItem?.['B'];
+      }).filter(Boolean);
+      const affectedItems = [copySourceItemId, ...targetItemIds];
       console.log('[DEBUG COPY] About to refresh chord charts for affected items:', affectedItems);
       for (const itemId of affectedItems) {
         try {
@@ -2035,7 +2071,7 @@ export const PracticePage = () => {
       // Delete all chord charts for this item
       const existingCharts = chordCharts[deleteModalItemId] || [];
       for (const chart of existingCharts) {
-        const response = await fetch(`/api/chord-charts/${chart.id}`, {
+        const response = await fetch(`/api/items/${deleteModalItemId}/chord-charts/${chart.id}`, {
           method: 'DELETE'
         });
         if (!response.ok) {
@@ -2630,8 +2666,6 @@ export const PracticePage = () => {
                           const sectionsFromState = chordSections[itemReferenceId];
                           const sectionsFromCharts = sectionsFromState ? null : getChordSections(itemReferenceId);
                           const finalSections = sectionsFromState || sectionsFromCharts || [];
-
-                          console.log(`[DEBUG RENDER] Item ${itemReferenceId}: sectionsFromState=${sectionsFromState?.length || 0}, sectionsFromCharts=${sectionsFromCharts?.length || 0}, finalSections=${finalSections?.length || 0}`);
                           
                           // Map sections to JSX elements with itemReferenceId in scope
                           const sections = finalSections.map((section, sectionIndex) => {
@@ -2815,11 +2849,23 @@ export const PracticePage = () => {
                                             }`}
                                             onDragOver={(e) => {
                                               e.preventDefault();
-                                              setIsDragActive(prev => ({ ...prev, [itemReferenceId]: true }));
+                                              setIsDragActive(prev => {
+                                                // Only update state if it's actually changing
+                                                if (prev[itemReferenceId] !== true) {
+                                                  return { ...prev, [itemReferenceId]: true };
+                                                }
+                                                return prev;
+                                              });
                                             }}
                                             onDragLeave={(e) => {
                                               e.preventDefault();
-                                              setIsDragActive(prev => ({ ...prev, [itemReferenceId]: false }));
+                                              setIsDragActive(prev => {
+                                                // Only update state if it's actually changing
+                                                if (prev[itemReferenceId] !== false) {
+                                                  return { ...prev, [itemReferenceId]: false };
+                                                }
+                                                return prev;
+                                              });
                                             }}
                                             onDrop={(e) => {
                                               e.preventDefault();
@@ -3145,11 +3191,27 @@ export const PracticePage = () => {
       {/* Copy Chord Charts Modal */}
       {showCopyModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div 
-            className={`bg-gray-700 rounded-lg p-6 ${showOverwriteConfirmation ? 'max-w-xs' : 'w-full max-w-md'} max-h-[80vh] flex flex-col`}
+          <div
+            className={`bg-gray-700 rounded-lg p-6 ${showOverwriteConfirmation || copyProgress === 'complete' ? 'max-w-xs' : 'w-full max-w-md'} max-h-[80vh] flex flex-col`}
             onWheel={(e) => e.stopPropagation()}
           >
-            {!showOverwriteConfirmation ? (
+            {copyProgress === 'complete' ? (
+              <>
+                <h2 className="text-xl font-bold text-white mb-4">
+                  Success!
+                </h2>
+                <div className="flex items-center justify-center space-x-2 mb-4">
+                  <Check className="h-6 w-6 text-green-500" />
+                  <span className="text-green-400 text-lg">Chord charts copied successfully!</span>
+                </div>
+                <Button
+                  onClick={handleCloseCopyModal}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
+                  Done
+                </Button>
+              </>
+            ) : !showOverwriteConfirmation ? (
               <>
                 <h2 className="text-xl font-bold text-white mb-4">
                   Copy Chord Charts

@@ -21,10 +21,15 @@ export const useActiveRoutine = () => {
         return;
       }
 
+      // Sort items by order (column C) to match the Routines page
+      const sortedItems = data.items.sort((a, b) =>
+        parseInt(a.routineEntry['C']) - parseInt(b.routineEntry['C'])
+      );
+
       setRoutine({
         id: data.active_id,
         name: data.name,
-        items: data.items.map(item => ({
+        items: sortedItems.map(item => ({
           ...item.routineEntry,
           // Only include minimal details (title) for collapsed view
           minimalDetails: item.itemMinimal

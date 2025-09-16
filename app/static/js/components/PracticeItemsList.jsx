@@ -41,7 +41,7 @@ const SortableItem = React.memo(({ item, onEdit, onDelete }) => {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: item['A'] });
+  } = useSortable({ id: item['B'] });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -52,7 +52,7 @@ const SortableItem = React.memo(({ item, onEdit, onDelete }) => {
   const handleDelete = async (e) => {
     e.preventDefault();
     e.stopPropagation();
-    await onDelete(item['A']);
+    await onDelete(item['B']);
   };
 
   return (
@@ -116,7 +116,7 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
       }
       
       // Track item deletion
-      const itemToDeleteData = items.find(item => item['A'] === itemToDelete);
+      const itemToDeleteData = items.find(item => item['B'] === itemToDelete);
       if (itemToDeleteData) {
         const itemName = itemToDeleteData['C'] || `Item ${itemToDelete}`; // Column C is Title
         trackItemOperation('deleted', 'item', itemName);
@@ -150,17 +150,17 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
     setIsDragging(false);
     if (isDeleting || !active || !over || active.id === over.id) return;
   
-    const oldIndex = items.findIndex(item => item['A'] === active.id);
-    const newIndex = items.findIndex(item => item['A'] === over.id);
+    const oldIndex = items.findIndex(item => item['B'] === active.id);
+    const newIndex = items.findIndex(item => item['B'] === over.id);
     
     try {
       // Create new array with moved item
       const reordered = arrayMove(items, oldIndex, newIndex);
       
-      // Update all orders to match new positions
+      // Update all orders to match new positions (using Column B as identifier)
       const withNewOrder = reordered.map((item, index) => ({
-        ...item,
-        'G': index
+        'A': item['B'],  // Use Column B (ItemID) as the identifier for backend
+        'G': index       // Column G is the order
       }));
       
       // Send complete new state
@@ -242,13 +242,13 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
             onDragEnd={handleDragEnd}
           >
             <SortableContext
-              items={filteredItems.map(item => item['A'])}
+              items={filteredItems.map(item => item['B'])}
               strategy={verticalListSortingStrategy}
             >
               <div className="space-y-4">
                 {filteredItems.map((item) => (
                   <SortableItem
-                    key={item['A']}
+                    key={item['B']}
                     item={item}
                     onEdit={handleEditClick}
                     onDelete={handleDelete}

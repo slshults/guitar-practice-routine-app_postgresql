@@ -46,8 +46,55 @@ class ChordChartService(BaseService):
         def _delete_chart():
             repo = ChordChartRepository(self.db)
             return repo.delete(chart_id)
-        
+
         return self._execute_with_transaction(_delete_chart)
+
+    def delete_chord_chart_from_item(self, item_id: str, chart_id: int) -> bool:
+        """Delete a chord chart from a specific item (handles comma-separated sharing properly)"""
+        def _delete_chart_from_item():
+            from sqlalchemy import text
+
+            # First, find the chord chart
+            chart_result = self.db.execute(text('''
+                SELECT chord_id, item_id
+                FROM chord_charts
+                WHERE chord_id = :chart_id
+            '''), {'chart_id': chart_id}).fetchone()
+
+            if not chart_result:
+                logging.warning(f"Chord chart {chart_id} not found")
+                return False
+
+            current_item_ids_str = chart_result[1]  # item_id column
+            current_item_ids = [id.strip() for id in current_item_ids_str.split(',') if id.strip()]
+
+            # Check if the item is actually associated with this chart
+            if item_id not in current_item_ids:
+                logging.warning(f"Item {item_id} is not associated with chord chart {chart_id}")
+                return False
+
+            if len(current_item_ids) == 1:
+                # Chart belongs only to this item - delete entirely
+                self.db.execute(text('DELETE FROM chord_charts WHERE chord_id = :chart_id'), {'chart_id': chart_id})
+                logging.info(f"Deleted chord chart {chart_id} that belonged only to item {item_id}")
+            else:
+                # Chart is shared - remove only this item from the comma-separated list
+                current_item_ids.remove(item_id)
+                new_item_ids_str = ', '.join(current_item_ids)
+                self.db.execute(text('''
+                    UPDATE chord_charts
+                    SET item_id = :new_item_ids
+                    WHERE chord_id = :chart_id
+                '''), {
+                    'new_item_ids': new_item_ids_str,
+                    'chart_id': chart_id
+                })
+                logging.info(f"Removed item {item_id} from shared chord chart {chart_id}, now shared by: {new_item_ids_str}")
+
+            self.db.commit()
+            return True
+
+        return self._execute_with_transaction(_delete_chart_from_item)
     
     def update_order(self, item_id: str, chord_charts: List[Dict[str, Any]]) -> bool:
         """Update chord chart ordering for an item."""
@@ -103,46 +150,103 @@ class ChordChartService(BaseService):
         return self._execute_with_transaction(_get_stats)
     
     def copy_chord_charts_to_items(self, source_item_id: str, target_item_ids: List[str]) -> Dict[str, Any]:
-        """Copy chord charts from source item to multiple target items (PostgreSQL version)."""
+        """Copy chord charts from source item to multiple target items using sharing model (PostgreSQL version)."""
         def _copy_charts():
-            repo = ChordChartRepository(self.db)
-            
-            # Get source charts using ItemID (no conversion needed)
-            source_charts = repo.get_for_item(source_item_id)
-            if not source_charts:
+            from sqlalchemy import text
+
+            source_item_id_str = str(source_item_id)
+            target_item_ids_str = [str(tid) for tid in target_item_ids]
+
+            # Step 1: Find all chord charts that belong to the source item (using comma-separated matching)
+            source_charts = []
+            result = self.db.execute(text('''
+                SELECT chord_id, item_id, title, chord_data, created_at, order_col
+                FROM chord_charts
+                WHERE item_id = :exact_id
+                   OR item_id LIKE :pattern1
+                   OR item_id LIKE :pattern2
+                   OR item_id LIKE :pattern3
+                ORDER BY order_col
+            '''), {
+                'exact_id': source_item_id_str,
+                'pattern1': f'{source_item_id_str},%',      # "92, 100"
+                'pattern2': f'%, {source_item_id_str}',      # "100, 92"
+                'pattern3': f'%, {source_item_id_str},%'     # "100, 92, 45"
+            }).fetchall()
+
+            if not result:
                 logging.warning(f"No chord charts found for source item {source_item_id}")
-                return {'updated': 0, 'removed': 0, 'charts_found': 0, 'target_items': []}
-            
+                return {'updated': 0, 'removed': 0, 'charts_found': 0, 'target_items': target_item_ids}
+
             updated_count = 0
             removed_count = 0
-            
-            # For each target item
-            for target_item_id in target_item_ids:
-                # Remove existing chord charts from target item
-                removed_count += repo.delete_all_for_item(target_item_id)
-                logging.info(f"Removed existing charts from item {target_item_id}")
-                
-                # Copy source charts to target item using batch_create
-                chart_data_list = []
-                for source_chart in source_charts:
-                    chart_data = {
-                        'title': source_chart.title,
-                        'chord_data': source_chart.chord_data,
-                        'order': source_chart.order_col  # Use order_col from ChordChart model
-                    }
-                    chart_data_list.append(chart_data)
-                
-                # Create all charts for this target item
-                if chart_data_list:
-                    new_charts = repo.batch_create(target_item_id, chart_data_list)
-                    updated_count += len(new_charts)
-                    logging.info(f"Copied {len(new_charts)} charts to item {target_item_id}")
-            
+
+            # Step 2: Remove existing chord charts from target items (source wins - same as sheets version)
+            for target_id in target_item_ids_str:
+                logging.info(f"Removing existing chord charts for target item {target_id} before copying")
+
+                # Find charts that contain the target item ID
+                target_charts = self.db.execute(text('''
+                    SELECT chord_id, item_id FROM chord_charts
+                    WHERE item_id = :exact_id
+                       OR item_id LIKE :pattern1
+                       OR item_id LIKE :pattern2
+                       OR item_id LIKE :pattern3
+                '''), {
+                    'exact_id': target_id,
+                    'pattern1': f'{target_id},%',
+                    'pattern2': f'%, {target_id}',
+                    'pattern3': f'%, {target_id},%'
+                }).fetchall()
+
+                for chart_row in target_charts:
+                    chart_id, current_item_ids_str = chart_row
+                    item_ids = [id.strip() for id in current_item_ids_str.split(',') if id.strip()]
+
+                    if target_id in item_ids:
+                        if len(item_ids) == 1:
+                            # Chart belongs only to target - remove entirely
+                            self.db.execute(text('DELETE FROM chord_charts WHERE chord_id = :chart_id'), {'chart_id': chart_id})
+                            removed_count += 1
+                            logging.info(f"Removed chart {chart_id} that belonged only to item {target_id}")
+                        else:
+                            # Chart is shared - remove target from the list
+                            item_ids.remove(target_id)
+                            new_item_ids_str = ', '.join(item_ids)
+                            self.db.execute(text('UPDATE chord_charts SET item_id = :new_item_ids WHERE chord_id = :chart_id'), {
+                                'new_item_ids': new_item_ids_str,
+                                'chart_id': chart_id
+                            })
+                            logging.info(f"Removed item {target_id} from shared chart {chart_id}")
+
+            # Step 3: Add target item IDs to source charts (sharing model - same as sheets version)
+            for chart_row in result:
+                chart_id, current_item_ids_str = chart_row[0], chart_row[1]
+                current_item_ids = [id.strip() for id in current_item_ids_str.split(',') if id.strip()]
+
+                # Add target item IDs if they're not already present
+                for target_id in target_item_ids_str:
+                    if target_id not in current_item_ids:
+                        current_item_ids.append(target_id)
+                        logging.info(f"Added item {target_id} to chart {chart_id}")
+
+                # Update the ItemID column with comma-separated list
+                new_item_ids_str = ', '.join(current_item_ids)
+                self.db.execute(text('UPDATE chord_charts SET item_id = :new_item_ids WHERE chord_id = :chart_id'), {
+                    'new_item_ids': new_item_ids_str,
+                    'chart_id': chart_id
+                })
+                updated_count += 1
+
+            self.db.commit()
+
+            logging.info(f"Successfully copied {len(result)} chord charts from item {source_item_id} to {len(target_item_ids)} items: {updated_count} charts updated, {removed_count} existing charts removed")
+
             return {
                 'updated': updated_count,
                 'removed': removed_count,
-                'charts_found': len(source_charts),
+                'charts_found': len(result),
                 'target_items': target_item_ids
             }
-        
+
         return self._execute_with_transaction(_copy_charts)

@@ -7,7 +7,7 @@ import { useNavigation } from '@contexts/NavigationContext';
 
 const NavMenu = ({ className }) => {
   const { activePage, setActivePage } = useNavigation();
-  const navItems = ['Practice', 'Routines', 'Items', 'Imports'];
+  const navItems = ['Practice', 'Routines', 'Items'];
 
   return (
     <nav className={cn("flex items-center space-x-4 mb-8", className)}>

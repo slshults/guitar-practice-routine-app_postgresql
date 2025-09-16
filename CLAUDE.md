@@ -205,6 +205,29 @@ charts = data_layer.get_chord_charts_for_item(item_id)
 - **Physical Row Preservation:** Database should mirror exact physical sheet row sequence
 - **CommonChords Migration:** Use `migrate_common_chords.py` with rate limiting for all 12,708+ records
 
+#### Critical PostgreSQL Migration Debugging Patterns
+
+**ID Mapping Issues (Most Common Bug Pattern):**
+- **Column A**: Database primary key (auto-incrementing integer)
+- **Column B**: Google Sheets ItemID (string like "107")
+- **CRITICAL**: Frontend must use ItemIDs (Column B) for API calls, never primary keys (Column A)
+- **Sharing Model**: Chord charts use comma-separated ItemIDs like "67, 100, 1, 2"
+
+**Debugging ID Mismatches:**
+```javascript
+// WRONG: Using primary keys (Column A)
+const targetIds = selectedItems.map(item => item['A'])
+
+// CORRECT: Using ItemIDs (Column B)
+const targetIds = selectedItems.map(item => item['B'])
+```
+
+**Chord Chart Sharing Model:**
+- **Delete from one item**: Remove only that ItemID from comma-separated list
+- **Copy to items**: Add ItemIDs to existing comma-separated list
+- **NEVER**: Delete entire record when removing from shared charts
+- **Endpoint pattern**: `/api/items/{item_id}/chord-charts/{chart_id}` (item context required)
+
 ### File Path Handling
 - WSL-friendly path mapping for Windows folders (see `app/routes.py`)
 - Local songbook folder linking supported
@@ -515,6 +538,15 @@ When implementing API endpoints, always verify BOTH directions of batch operatio
 - **`/api/chord-charts/batch-delete`** (POST) - DELETE multiple chord charts by IDs
 
 **Common Issue**: Frontend may call both endpoints for different purposes. Check sheets version for complete endpoint list.
+
+### Routes File Architecture (CRITICAL)
+**Important Discovery**: The app uses `routes_v2.py` as the main routes file (`app/__init__.py` imports `routes_v2` as `routes`).
+
+- **`routes.py`**: Legacy file with some endpoints that aren't loaded by the app
+- **`routes_v2.py`**: Active routes file that the app actually uses
+- **Migration Issue**: Some endpoints exist in `routes.py` but need to be ported to `routes_v2.py` to be accessible
+
+**Fix Pattern**: When "missing" endpoints are reported, check if they exist in `routes.py` and need porting to `routes_v2.py`.
 
 ### Complex Debugging with Task Tool
 For multi-system issues (missing endpoints, data format problems, etc.), use Task tool with general-purpose agent:

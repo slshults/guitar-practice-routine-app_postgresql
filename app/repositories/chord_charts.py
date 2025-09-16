@@ -25,8 +25,17 @@ class ChordChartRepository(BaseRepository):
     
     def get_for_item(self, item_id: str) -> List[ChordChart]:
         """Get all chord charts for an item, ordered by order column."""
+        # Handle comma-separated ItemIDs - search for ItemIDs that contain this ID
+        from sqlalchemy import or_, and_
+        item_id_str = str(item_id)
+
         return self.db.query(ChordChart).filter(
-            ChordChart.item_id == item_id
+            or_(
+                ChordChart.item_id == item_id_str,                    # Exact match: "92"
+                ChordChart.item_id.like(f'{item_id_str},%'),         # Starts with: "92, 100"
+                ChordChart.item_id.like(f'%, {item_id_str}'),        # Ends with: "100, 92"
+                ChordChart.item_id.like(f'%, {item_id_str},%')       # Middle: "100, 92, 45"
+            )
         ).order_by(ChordChart.order_col).all()
     
     def get_for_item_sheets_format(self, item_id: str) -> List[Dict[str, Any]]:
