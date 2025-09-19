@@ -348,6 +348,12 @@ export const PracticePage = () => {
   const [deleteModalItemId, setDeleteModalItemId] = useState(null);
   const [autocreateProgress, setAutocreateProgress] = useState({});
   const [copyProgress, setCopyProgress] = useState(null);
+
+  // Copy from modal state
+  const [showCopyFromModal, setShowCopyFromModal] = useState(false);
+  const [copyFromSearchTerm, setCopyFromSearchTerm] = useState('');
+  const [selectedSourceItem, setSelectedSourceItem] = useState(null);
+  const [copyFromTargetItemId, setCopyFromTargetItemId] = useState(null);
   const [isDragActive, setIsDragActive] = useState({});
   const [showAutocreateZone, setShowAutocreateZone] = useState({});
   const [autocreateAbortController, setAutocreateAbortController] = useState({});
@@ -1102,6 +1108,8 @@ export const PracticePage = () => {
       if (event.key === 'Escape') {
         if (showCopyModal) {
           handleCloseCopyModal();
+        } else if (showCopyFromModal) {
+          handleCloseCopyFromModal();
         } else if (showDeleteChordsModal) {
           setShowDeleteChordsModal(false);
           setDeleteModalItemId(null);
@@ -1119,7 +1127,7 @@ export const PracticePage = () => {
 
     document.addEventListener('keydown', handleEscKey);
     return () => document.removeEventListener('keydown', handleEscKey);
-  }, [showCopyModal, showDeleteChordsModal, showMixedContentModal, showUnsupportedFormatModal, showCancelConfirmation, showApiErrorModal]);
+  }, [showCopyModal, showCopyFromModal, showDeleteChordsModal, showMixedContentModal, showUnsupportedFormatModal, showCancelConfirmation, showApiErrorModal]);
 
   // Initialize timer for an item
   const initTimer = useCallback((itemId, duration) => {
@@ -2122,6 +2130,129 @@ export const PracticePage = () => {
     // Stay in the modal, return to item selection
   };
 
+  // Copy from modal functions
+  const handleOpenCopyFromModal = async (itemId) => {
+    console.log('Opening copy from modal for item:', itemId);
+    setCopyFromTargetItemId(itemId);
+
+    // Load chord charts for items that have them (filter to only items with chord charts)
+    const itemsWithCharts = [];
+
+    if (allItems && allItems.length > 0) {
+      for (const item of allItems) {
+        const itemReferenceId = item['B']; // ItemID
+        if (itemReferenceId && itemReferenceId !== itemId) { // Don't include current item
+          try {
+            const response = await fetch(`/api/items/${itemReferenceId}/chord-charts`);
+            if (response.ok) {
+              const charts = await response.json();
+              if (charts.length > 0) {
+                itemsWithCharts.push(item);
+                setChordCharts(prev => ({ ...prev, [itemReferenceId]: charts }));
+              }
+            }
+          } catch (error) {
+            console.error(`Error loading chord charts for item ${itemReferenceId}:`, error);
+          }
+        }
+      }
+    }
+
+    console.log(`Found ${itemsWithCharts.length} items with chord charts`);
+    setShowCopyFromModal(true);
+    setCopyFromSearchTerm('');
+    setSelectedSourceItem(null);
+  };
+
+  const handleCloseCopyFromModal = () => {
+    setShowCopyFromModal(false);
+    setCopyFromTargetItemId(null);
+    setCopyFromSearchTerm('');
+    setSelectedSourceItem(null);
+  };
+
+  const handleConfirmCopyFrom = async () => {
+    console.log('handleConfirmCopyFrom called', { selectedSourceItem, copyFromTargetItemId });
+    if (!selectedSourceItem || !copyFromTargetItemId) {
+      console.log('Early return: missing source or target');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/chord-charts/copy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source_item_id: selectedSourceItem,
+          target_item_ids: [copyFromTargetItemId]
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to copy chord charts: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Chord charts copied successfully:', result);
+
+      // Force refresh chord charts for target item
+      const response2 = await fetch(`/api/items/${copyFromTargetItemId}/chord-charts`);
+      if (response2.ok) {
+        const charts = await response2.json();
+
+        setChordCharts(prev => ({
+          ...prev,
+          [copyFromTargetItemId]: charts
+        }));
+
+        // Build sections from loaded chord charts
+        if (charts.length === 0) {
+          setChordSections(prev => ({
+            ...prev,
+            [copyFromTargetItemId]: []
+          }));
+        } else {
+          const sectionMap = new Map();
+
+          charts.forEach(chart => {
+            const sectionId = chart.sectionId || 'section-1';
+            const sectionLabel = chart.sectionLabel || 'Verse';
+            const sectionRepeatCount = chart.sectionRepeatCount || '';
+
+            if (!sectionMap.has(sectionId)) {
+              sectionMap.set(sectionId, {
+                id: sectionId,
+                label: sectionLabel,
+                repeatCount: sectionRepeatCount,
+                chords: []
+              });
+            }
+
+            sectionMap.get(sectionId).chords.push(chart);
+          });
+
+          const sections = Array.from(sectionMap.values()).sort((a, b) => {
+            const aFirstOrder = a.chords.length > 0 ? (a.chords[0].order || 0) : 0;
+            const bFirstOrder = b.chords.length > 0 ? (b.chords[0].order || 0) : 0;
+            return aFirstOrder - bFirstOrder;
+          });
+
+          setChordSections(prev => ({
+            ...prev,
+            [copyFromTargetItemId]: sections
+          }));
+        }
+      }
+
+      handleCloseCopyFromModal();
+    } catch (error) {
+      console.error('Error copying chord charts:', error);
+      // TODO: Add user-visible error handling
+    }
+  };
+
   // Autocreate functions
   const handleAutocreateClick = (itemId) => {
     const existingCharts = chordCharts[itemId] || [];
@@ -2919,14 +3050,6 @@ export const PracticePage = () => {
                                 </Button>
                               </div>
 
-                              <Button
-                                variant="outline"
-                                onClick={(e) => toggleChordEditor(itemReferenceId, e)}
-                                className="w-full mb-4"
-                              >
-                                {showChordEditor[itemReferenceId] ? 'Hide Chord Editor' : 'Add New Chord'}
-                              </Button>
-
                               {/* Autocreate from files - collapsible section */}
                               {(() => {
                                 const existingCharts = chordCharts[itemReferenceId] || [];
@@ -3166,19 +3289,49 @@ export const PracticePage = () => {
 
                               <Button
                                 variant="outline"
+                                onClick={() => {
+                                  setScrollBackContext({
+                                    itemId: itemReferenceId,
+                                    scrollPosition: window.scrollY
+                                  });
+                                  setShowChordEditor(prev => ({ ...prev, [itemReferenceId]: true }));
+                                  setTimeout(() => {
+                                    const editorElement = document.querySelector(`[data-editor-for-item="${itemReferenceId}"]`);
+                                    if (editorElement) {
+                                      editorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    }
+                                  }, 100);
+                                }}
+                                className="w-full mb-4 border-green-600 text-green-300 hover:bg-green-800"
+                              >
+                                + Add New Chord
+                              </Button>
+
+                              <Button
+                                variant="outline"
                                 onClick={() => addNewSection(itemReferenceId)}
                                 className="w-full mb-4 border-gray-600"
                               >
                                 + Add New Section
                               </Button>
 
-                              <Button
-                                variant="outline"
-                                onClick={() => handleOpenCopyModal(itemReferenceId)}
-                                className="w-full mb-4 border-purple-600 text-purple-300 hover:bg-purple-800"
-                              >
-                                Copy chord charts to other song
-                              </Button>
+                              {/* Copy buttons on same row */}
+                              <div className="flex gap-2 mb-4">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => handleOpenCopyFromModal(itemReferenceId)}
+                                  className="flex-1 border-blue-600 text-blue-300 hover:bg-blue-800"
+                                >
+                                  Copy chord charts from other song
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => handleOpenCopyModal(itemReferenceId)}
+                                  className="flex-1 border-purple-600 text-purple-300 hover:bg-purple-800"
+                                >
+                                  Copy chord charts to other song
+                                </Button>
+                              </div>
 
                               {/* Chord editor */}
                               {showChordEditor[itemReferenceId] && (
@@ -3464,6 +3617,81 @@ export const PracticePage = () => {
         </div>
       )}
 
+      {/* Copy From Other Song Modal */}
+      {showCopyFromModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div
+            className="bg-gray-700 rounded-lg p-6 w-full max-w-md max-h-[80vh] flex flex-col"
+            onWheel={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-bold text-white mb-4">
+              Copy Chord Charts From Other Song
+            </h2>
+
+            <p className="text-gray-300 mb-2">
+              Copy chord charts to "{allItems?.find(item => item['B'] === copyFromTargetItemId)?.['C'] || 'Unknown Song'}" from:
+            </p>
+
+            {/* Search field */}
+            <input
+              type="text"
+              placeholder="Search songs with chord charts..."
+              value={copyFromSearchTerm}
+              onChange={(e) => setCopyFromSearchTerm(e.target.value)}
+              className="w-full p-2 mb-4 bg-gray-700 text-white rounded border border-gray-600 focus:border-blue-500"
+            />
+
+            {/* Scrollable song list - only items with chord charts */}
+            <div className="flex-1 overflow-y-auto mb-4 min-h-0 modal-scroll">
+              {allItems?.filter(item => {
+                const itemReferenceId = item['B'];
+                const hasCharts = chordCharts[itemReferenceId] && chordCharts[itemReferenceId].length > 0;
+                const matchesSearch = copyFromSearchTerm === '' ||
+                  item['C']?.toLowerCase().includes(copyFromSearchTerm.toLowerCase());
+                return hasCharts && matchesSearch && itemReferenceId !== copyFromTargetItemId;
+              }).map(item => (
+                <div key={item['A']} className="flex items-center mb-2">
+                  <input
+                    type="radio"
+                    id={`copy-from-item-${item['A']}`}
+                    name="copyFromSource"
+                    checked={selectedSourceItem === item['B']}
+                    onChange={() => setSelectedSourceItem(item['B'])}
+                    className="mr-3"
+                  />
+                  <label
+                    htmlFor={`copy-from-item-${item['A']}`}
+                    className="flex-1 cursor-pointer text-white hover:text-gray-300"
+                  >
+                    {item['C'] || 'Unknown Song'}
+                    <span className="text-xs text-gray-400 ml-2">
+                      ({(chordCharts[item['B']] || []).length} charts)
+                    </span>
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={handleCloseCopyFromModal}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleConfirmCopyFrom}
+                disabled={!selectedSourceItem}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Copy Chord Charts
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Existing Chord Charts Modal */}
       <AlertDialog open={showDeleteChordsModal} onOpenChange={setShowDeleteChordsModal}>
