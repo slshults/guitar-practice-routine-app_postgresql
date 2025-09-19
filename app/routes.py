@@ -13,6 +13,7 @@ from app.sheets import ( # type: ignore
     copy_chord_charts_to_items, get_common_chords_efficiently
 )
 from app.data_layer import DataLayer
+from app.utils.llm_analytics import llm_analytics
 from google_auth_oauthlib.flow import Flow
 import os
 import logging
@@ -1569,13 +1570,13 @@ def autocreate_chord_charts():
             if not filename:
                 return None
                 
-            # Check file size (10MB limit)
+            # Check file size (5MB limit)
             file.seek(0, os.SEEK_END)
             file_size = file.tell()
             file.seek(0)
-            
-            if file_size > 10 * 1024 * 1024:  # 10MB
-                return {'error': f'File {filename} is too large (max 10MB)'}
+
+            if file_size > 5 * 1024 * 1024:  # 5MB
+                return {'error': f'File {filename} is too large (max 5MB)'}
                 
             # Read file content
             file_data = file.read()
@@ -1776,6 +1777,7 @@ You are analyzing {len(reference_files)} reference chord diagram files.
                 print(f"INFO: Unsupported reference file type for '{ref_file.get('name')}', skipping")
         
         # Use Opus for superior visual analysis
+        llm_start_time = time.time()
         response = client.messages.create(
             model="claude-opus-4-1-20250805",
             max_tokens=4000,
@@ -1784,7 +1786,25 @@ You are analyzing {len(reference_files)} reference chord diagram files.
                 "content": message_content
             }]
         )
-        
+        llm_end_time = time.time()
+
+        # Track LLM generation with PostHog Analytics
+        llm_analytics.track_generation(
+            model="claude-opus-4-1-20250805",
+            input_messages=[{"role": "user", "content": "Visual chord diagram analysis"}],
+            output_choices=[{"message": {"content": response.content[0].text}}],
+            usage={
+                "input_tokens": response.usage.input_tokens if hasattr(response, 'usage') else None,
+                "output_tokens": response.usage.output_tokens if hasattr(response, 'usage') else None
+            },
+            latency_seconds=llm_end_time - llm_start_time,
+            custom_properties={
+                "function": "analyze_reference_diagrams_only",
+                "file_count": len(reference_files),
+                "analysis_type": "visual_chord_diagrams"
+            }
+        )
+
         return response.content[0].text
         
     except Exception as e:
@@ -2157,6 +2177,7 @@ Thanks so much for being thorough with this, you rock Claude! 🤘🎸🚀"""
         
         # Use Opus 4.1 for superior visual analysis of chord diagrams
         app.logger.info("Using Opus 4.1 for chord chart visual analysis")
+        llm_start_time = time.time()
         response = client.messages.create(
             model="claude-opus-4-1-20250805",
             max_tokens=6000,
@@ -2165,8 +2186,27 @@ Thanks so much for being thorough with this, you rock Claude! 🤘🎸🚀"""
                 "content": message_content
             }]
         )
-        
+        llm_end_time = time.time()
+
         response_text = response.content[0].text
+
+        # Track LLM generation with PostHog Analytics
+        llm_analytics.track_generation(
+            model="claude-opus-4-1-20250805",
+            input_messages=[{"role": "user", "content": "Chord chart processing and analysis"}],
+            output_choices=[{"message": {"content": response_text}}],
+            usage={
+                "input_tokens": response.usage.input_tokens if hasattr(response, 'usage') else None,
+                "output_tokens": response.usage.output_tokens if hasattr(response, 'usage') else None
+            },
+            latency_seconds=llm_end_time - llm_start_time,
+            custom_properties={
+                "function": "process_chord_charts_directly",
+                "file_count": len(uploaded_files),
+                "analysis_type": "chord_chart_processing",
+                "item_id": str(item_id)
+            }
+        )
         
         # Parse JSON response
         chord_data = parse_json_response(response_text)

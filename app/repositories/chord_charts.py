@@ -173,8 +173,21 @@ class ChordChartRepository(BaseRepository):
         
         # Flatten chord_data properties to top level (matching frontend expectations)
         chord_data = chart.chord_data or {}
+
+        # Clean finger data - remove None values from finger arrays
+        raw_fingers = chord_data.get('fingers', [])
+        clean_fingers = []
+        for finger in raw_fingers:
+            if isinstance(finger, list) and len(finger) >= 2:
+                # Filter out None values and keep only valid numbers
+                clean_finger = [x for x in finger if x is not None]
+                if len(clean_finger) >= 2:  # Must have at least string and fret
+                    clean_fingers.append(clean_finger)
+            else:
+                clean_fingers.append(finger)  # Keep non-list items as-is
+
         result.update({
-            'fingers': chord_data.get('fingers', []),
+            'fingers': clean_fingers,
             'barres': chord_data.get('barres', []),
             'tuning': chord_data.get('tuning', 'EADGBE'),
             'capo': chord_data.get('capo', 0),

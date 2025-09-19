@@ -22,6 +22,7 @@ import { ChevronDown, ChevronRight, Check, Plus, FileText, Book, Music, Upload, 
 import { NoteEditor } from './NoteEditor';
 import { ChordChartEditor } from './ChordChartEditor';
 import ApiErrorModal from './ApiErrorModal';
+import AutocreateSuccessModal from './AutocreateSuccessModal';
 import { serverDebug, serverInfo } from '../utils/logging';
 import {
   AlertDialog,
@@ -181,8 +182,9 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
   }, [chart]); // Only re-render when chart data changes
 
   return (
-    <div 
-      className="bg-gray-800 p-1 rounded-lg relative" 
+    <div
+      className="bg-gray-800 p-1 rounded-lg relative"
+      data-chord-id={chart.id}
       style={{
         minWidth: '0',
         maxWidth: '100%',
@@ -331,6 +333,7 @@ export const PracticePage = () => {
   const [deletingSection, setDeletingSection] = useState(new Set());
   const [editingChordId, setEditingChordId] = useState(null);
   const [insertionContext, setInsertionContext] = useState(null);
+  const [scrollBackContext, setScrollBackContext] = useState(null);
   
   // Chord chart copy modal state
   const [showCopyModal, setShowCopyModal] = useState(false);
@@ -364,6 +367,10 @@ export const PracticePage = () => {
   // API Error modal state
   const [showApiErrorModal, setShowApiErrorModal] = useState(false);
   const [apiError, setApiError] = useState(null);
+
+  // Autocreate Success modal state
+  const [showAutocreateSuccessModal, setShowAutocreateSuccessModal] = useState(false);
+  const [autocreateSuccessData, setAutocreateSuccessData] = useState(null);
   
   // Rotating processing messages for entertainment
   const processingMessages = [
@@ -1729,6 +1736,9 @@ export const PracticePage = () => {
       setEditingChordId(null);
       setInsertionContext(null);
 
+      // Scroll back to the original chord chart location
+      scrollBackToChord();
+
     } catch (error) {
       console.error('Error saving chord chart:', error);
       // TODO: Add user-visible error handling
@@ -1799,18 +1809,60 @@ export const PracticePage = () => {
     }
   };
 
+  const scrollBackToChord = () => {
+    if (scrollBackContext) {
+      setTimeout(() => {
+        // Try to find the specific chord chart element first
+        const chordElement = document.querySelector(`[data-chord-id="${scrollBackContext.chordId}"]`);
+        if (chordElement) {
+          chordElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        } else {
+          // Fallback to original scroll position
+          window.scrollTo({
+            top: scrollBackContext.scrollPosition,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+      setScrollBackContext(null);
+    }
+  };
+
   const handleEditChordChart = (itemId, chordId, chartData) => {
     console.log('Edit chord chart:', chordId, 'for item:', itemId, 'with data:', chartData);
-    
+
+    // Store context for scrolling back after edit
+    setScrollBackContext({
+      itemId,
+      chordId,
+      scrollPosition: window.scrollY
+    });
+
     // Show the chord editor for this item
     setShowChordEditor(prev => ({
       ...prev,
       [itemId]: true
     }));
-    
+
     // Set the editing chord ID in the editor so it knows to update instead of create
     // We'll need to pass this to the ChordChartEditor component
     setEditingChordId(chordId);
+
+    // Auto-scroll to the chord editor after it opens
+    setTimeout(() => {
+      const editorElement = document.querySelector(`[data-editor-for-item="${itemId}"]`);
+      if (editorElement) {
+        editorElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        });
+      }
+    }, 100); // Small delay to ensure the editor has rendered
   };
 
   const handleInsertChordAfter = (itemId, afterChordId, afterChartData) => {
@@ -2227,7 +2279,19 @@ export const PracticePage = () => {
             uploaded_file_names: files?.map(f => f.name).join(', ') || ''
           });
         }
-        
+
+        // Show success modal for visual analysis (more complex processing)
+        const itemDetails = getItemDetails(itemId);
+        const itemName = itemDetails?.['C'] || `Item ${itemId}`;
+        setAutocreateSuccessData({
+          itemName,
+          chordCount: result.chord_count || 0,
+          contentType: contentType || 'mixed',
+          uploadedFileNames: files?.map(f => f.name).join(', ') || '',
+          isVisionAnalysis: contentType === 'chord_charts' || result.used_vision_analysis === true
+        });
+        setShowAutocreateSuccessModal(true);
+
         // Force refresh chord charts
         try {
           const chartsResponse = await fetch(`/api/items/${itemId}/chord-charts`);
@@ -2359,7 +2423,19 @@ export const PracticePage = () => {
           uploaded_file_names: result.uploaded_file_names || ''
         });
       }
-      
+
+      // Show success modal for visual analysis (more complex processing)
+      const itemDetails = getItemDetails(itemId);
+      const itemName = itemDetails?.['C'] || `Item ${itemId}`;
+      setAutocreateSuccessData({
+        itemName,
+        chordCount: result.chord_count || 0,
+        contentType: result.content_type || 'auto-detected',
+        uploadedFileNames: result.uploaded_file_names || '',
+        isVisionAnalysis: result.content_type === 'chord_charts' || result.used_vision_analysis === true || (!result.content_type && result.used_vision_analysis !== false)
+      });
+      setShowAutocreateSuccessModal(true);
+
       // Force refresh chord charts for this item (don't use loadChordChartsForItem as it skips if already loaded)
       try {
         const response = await fetch(`/api/items/${itemId}/chord-charts`);
@@ -2840,13 +2916,15 @@ export const PracticePage = () => {
                                             <p>To import chord charts (standard and alternate tunings): Upload a file showing your chord charts, and we'll rebuild them for you here.</p>
                                           </div>
                                           
-                                          {/* Single drop zone for all files */}
-                                          <div
-                                            className={`w-full p-6 border-2 border-dashed rounded-lg transition-colors cursor-pointer mb-6 ${
-                                              isDragActive[itemReferenceId]
-                                                ? 'border-blue-400 bg-blue-900/20'
-                                                : 'border-blue-600 hover:border-blue-500 bg-blue-900/10'
-                                            }`}
+                                          {!progress && (
+                                            <>
+                                              {/* Single drop zone for all files */}
+                                              <div
+                                                className={`w-full p-6 border-2 border-dashed rounded-lg transition-colors cursor-pointer mb-6 ${
+                                                  isDragActive[itemReferenceId]
+                                                    ? 'border-blue-400 bg-blue-900/20'
+                                                    : 'border-blue-600 hover:border-blue-500 bg-blue-900/10'
+                                                }`}
                                             onDragOver={(e) => {
                                               e.preventDefault();
                                               setIsDragActive(prev => {
@@ -2889,7 +2967,7 @@ export const PracticePage = () => {
                                                 uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-300' : 'text-gray-300'
                                               }`}>Drop files here or click to browse</p>
                                               <p className="text-gray-400 text-sm mb-4">
-                                                PDFs, images (PNG, JPG) • Max 5 files
+                                                PDFs, images (PNG, JPG) • 5mb max
                                               </p>
                                               {uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? (
                                                 <div>
@@ -2926,7 +3004,9 @@ export const PracticePage = () => {
                                               Create Chord Charts
                                             </Button>
                                           </div>
-                                          
+                                            </>
+                                          )}
+
                                           {/* Progress/Status Display */}
                                           <div
                                             className="w-full p-6 border-2 border-dashed rounded-lg mt-4 bg-gray-800/50 border-gray-600"
@@ -3004,7 +3084,7 @@ export const PracticePage = () => {
                                                               <Sparkles className="h-8 w-8 text-blue-400 mx-auto mb-2" />
                                                               <p className="text-blue-300 font-medium mb-1">Ready to create chord charts</p>
                                                               <p className="text-gray-400 text-sm">
-                                                                Add more files, or click 'Create chord charts'
+                                                                Click 'Create chord charts'
                                                               </p>
                                                             </>
                                                           );
@@ -3012,7 +3092,7 @@ export const PracticePage = () => {
                                                           return (
                                                             <>
                                                               <Sparkles className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                                                              <p className="text-gray-300 font-medium mb-1">Add files above, then click 'Create Chord Charts'</p>
+                                                              <p className="text-gray-300 font-medium mb-1">Add a file above, then click 'Create Chord Charts'</p>
                                                               <p className="text-gray-400 text-xs">(The results will probably contain errors, use the ✏️edit icon to make any corrections needed.)</p>
                                                             </>
                                                           );
@@ -3061,7 +3141,8 @@ export const PracticePage = () => {
 
                               {/* Chord editor */}
                               {showChordEditor[itemReferenceId] && (
-                                <ChordChartEditor
+                                <div data-editor-for-item={itemReferenceId}>
+                                  <ChordChartEditor
                                   itemId={itemReferenceId}
                                   defaultTuning={itemDetails?.H || 'EADGBE'}
                                   editingChordId={editingChordId}
@@ -3071,8 +3152,12 @@ export const PracticePage = () => {
                                     setShowChordEditor(prev => ({ ...prev, [itemReferenceId]: false }));
                                     setEditingChordId(null);
                                     setInsertionContext(null);
+
+                                    // Scroll back to the original chord chart location
+                                    scrollBackToChord();
                                   }}
                                 />
+                                </div>
                               )}
                             </>
                           );
@@ -3359,9 +3444,9 @@ export const PracticePage = () => {
             }}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDeleteExistingCharts}
-              className="bg-orange-600 hover:bg-orange-700"
+              className="bg-orange-500 hover:bg-orange-600 text-white border-orange-500 shadow-lg font-medium"
             >
               Delete All & Autocreate
             </AlertDialogAction>
@@ -3442,13 +3527,23 @@ export const PracticePage = () => {
       </AlertDialog>
 
       {/* API Error Modal */}
-      <ApiErrorModal 
+      <ApiErrorModal
         isOpen={showApiErrorModal}
         onClose={() => {
           setShowApiErrorModal(false);
           setApiError(null);
         }}
         error={apiError}
+      />
+
+      {/* Autocreate Success Modal */}
+      <AutocreateSuccessModal
+        isOpen={showAutocreateSuccessModal}
+        onClose={() => {
+          setShowAutocreateSuccessModal(false);
+          setAutocreateSuccessData(null);
+        }}
+        autocreateData={autocreateSuccessData}
       />
     </div>
   );

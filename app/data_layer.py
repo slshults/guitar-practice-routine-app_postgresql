@@ -175,24 +175,45 @@ class DataLayer:
                     # Parse chord_data JSON from database
                     chord_data = row[3] if row[3] else {}
                     
-                    # Return proper frontend format (not Google Sheets columns)
+                    # Return proper frontend format (flattened format matching repository)
                     chart = {
-                        'id': row[0],  # chord_id as number
+                        'id': str(row[0]),  # chord_id as string to match repository format
                         'title': row[2] or '',  # chord name
-                        'chordData': chord_data,  # Full SVGuitar data object
                         'order': row[5] if row[5] is not None else 0,  # order_col
                         'createdAt': row[4].isoformat() if row[4] else '',
                         'itemId': row[1]  # Keep for reference but not used in frontend
                     }
-                    
-                    # Extract section metadata from chord_data if available
+
+                    # Flatten chord_data properties to top level (matching repository format)
                     if isinstance(chord_data, dict):
-                        chart['sectionId'] = chord_data.get('sectionId', '')
-                        chart['sectionLabel'] = chord_data.get('sectionLabel', '')
-                        chart['sectionRepeatCount'] = chord_data.get('sectionRepeatCount', '')
-                        chart['hasLineBreakAfter'] = chord_data.get('hasLineBreakAfter', False)
-                        chart['tuning'] = chord_data.get('tuning', 'EADGBE')
-                        chart['capo'] = chord_data.get('capo', 0)
+                        # Clean finger data - remove None values and filter out open strings (fret 0)
+                        raw_fingers = chord_data.get('fingers', [])
+                        clean_fingers = []
+                        for finger in raw_fingers:
+                            if isinstance(finger, list) and len(finger) >= 2:
+                                # Filter out None values and keep only valid numbers
+                                clean_finger = [x for x in finger if x is not None]
+                                # Only include fretted positions (fret > 0), skip open strings (fret 0)
+                                if len(clean_finger) >= 2 and clean_finger[1] > 0:
+                                    clean_fingers.append(clean_finger)
+                            else:
+                                clean_fingers.append(finger)  # Keep non-list items as-is
+
+                        chart.update({
+                            'fingers': clean_fingers,
+                            'barres': chord_data.get('barres', []),
+                            'tuning': chord_data.get('tuning', 'EADGBE'),
+                            'capo': chord_data.get('capo', 0),
+                            'startingFret': chord_data.get('startingFret', 1),
+                            'numFrets': chord_data.get('numFrets', 5),
+                            'numStrings': chord_data.get('numStrings', 6),
+                            'openStrings': chord_data.get('openStrings', []),
+                            'mutedStrings': chord_data.get('mutedStrings', []),
+                            'sectionId': chord_data.get('sectionId', ''),
+                            'sectionLabel': chord_data.get('sectionLabel', ''),
+                            'sectionRepeatCount': chord_data.get('sectionRepeatCount', ''),
+                            'hasLineBreakAfter': chord_data.get('hasLineBreakAfter', False)
+                        })
                     
                     charts.append(chart)
             
@@ -231,13 +252,13 @@ class DataLayer:
                     
                     for row in rows:
                         chart = {
-                            'id': row[0],
+                            'id': str(row[0]),  # chord_id as string to match repository format
                             'itemId': item_id,  # Use the requested item_id, not the comma-separated string
                             'title': row[2],
                             'createdAt': row[4] if row[4] else '',
                             'order': row[5]
                         }
-                        
+
                         # Parse chord_data JSON safely
                         chord_data = row[3]
                         if isinstance(chord_data, str):
@@ -248,22 +269,37 @@ class DataLayer:
                                 chord_data = {}
                         elif not isinstance(chord_data, dict):
                             chord_data = {}
-                            
-                        # Add chord data properties
+
+                        # Flatten chord_data properties to top level (matching repository format)
                         if chord_data:
-                            chart['fingers'] = chord_data.get('fingers', [])
-                            chart['barres'] = chord_data.get('barres', [])
-                            chart['openStrings'] = chord_data.get('openStrings', [])
-                            chart['mutedStrings'] = chord_data.get('mutedStrings', [])
-                            chart['startingFret'] = chord_data.get('startingFret', 1)
-                            chart['numFrets'] = chord_data.get('numFrets', 5)
-                            chart['numStrings'] = chord_data.get('numStrings', 6)
-                            chart['sectionId'] = chord_data.get('sectionId', '')
-                            chart['sectionLabel'] = chord_data.get('sectionLabel', '')
-                            chart['sectionRepeatCount'] = chord_data.get('sectionRepeatCount', '')
-                            chart['hasLineBreakAfter'] = chord_data.get('hasLineBreakAfter', False)
-                            chart['tuning'] = chord_data.get('tuning', 'EADGBE')
-                            chart['capo'] = chord_data.get('capo', 0)
+                            # Clean finger data - remove None values and filter out open strings (fret 0)
+                            raw_fingers = chord_data.get('fingers', [])
+                            clean_fingers = []
+                            for finger in raw_fingers:
+                                if isinstance(finger, list) and len(finger) >= 2:
+                                    # Filter out None values and keep only valid numbers
+                                    clean_finger = [x for x in finger if x is not None]
+                                    # Only include fretted positions (fret > 0), skip open strings (fret 0)
+                                    if len(clean_finger) >= 2 and clean_finger[1] > 0:
+                                        clean_fingers.append(clean_finger)
+                                else:
+                                    clean_fingers.append(finger)  # Keep non-list items as-is
+
+                            chart.update({
+                                'fingers': clean_fingers,
+                                'barres': chord_data.get('barres', []),
+                                'tuning': chord_data.get('tuning', 'EADGBE'),
+                                'capo': chord_data.get('capo', 0),
+                                'startingFret': chord_data.get('startingFret', 1),
+                                'numFrets': chord_data.get('numFrets', 5),
+                                'numStrings': chord_data.get('numStrings', 6),
+                                'openStrings': chord_data.get('openStrings', []),
+                                'mutedStrings': chord_data.get('mutedStrings', []),
+                                'sectionId': chord_data.get('sectionId', ''),
+                                'sectionLabel': chord_data.get('sectionLabel', ''),
+                                'sectionRepeatCount': chord_data.get('sectionRepeatCount', ''),
+                                'hasLineBreakAfter': chord_data.get('hasLineBreakAfter', False)
+                            })
                         
                         charts.append(chart)
                     
