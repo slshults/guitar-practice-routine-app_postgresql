@@ -1867,13 +1867,20 @@ export const PracticePage = () => {
 
   const handleInsertChordAfter = (itemId, afterChordId, afterChartData) => {
     console.log('Insert chord after:', afterChordId, 'for item:', itemId, 'with data:', afterChartData);
-    
+
+    // Store context for scrolling back after insert (use the afterChordId to scroll back to)
+    setScrollBackContext({
+      itemId,
+      chordId: afterChordId,
+      scrollPosition: window.scrollY
+    });
+
     // Show the chord editor for this item
     setShowChordEditor(prev => ({
       ...prev,
       [itemId]: true
     }));
-    
+
     // Set insertion context - we'll pass this to the ChordChartEditor
     // insertOrder should be the position to insert at, not after
     setInsertionContext({
@@ -1883,9 +1890,21 @@ export const PracticePage = () => {
       sectionRepeatCount: afterChartData.sectionRepeatCount,
       insertOrder: parseInt(afterChartData.order) + 1
     });
-    
+
     // Clear editing chord ID since this is a new chord
     setEditingChordId(null);
+
+    // Auto-scroll to the chord editor after it opens
+    setTimeout(() => {
+      const editorElement = document.querySelector(`[data-editor-for-item="${itemId}"]`);
+      if (editorElement) {
+        editorElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+          inline: 'nearest'
+        });
+      }
+    }, 100);
   };
 
   // Print chord charts functionality
@@ -2568,15 +2587,37 @@ export const PracticePage = () => {
   const toggleChordEditor = (itemId, e) => {
     e?.stopPropagation();
     setShowChordEditor(prev => {
-      // Clear editing state when closing the editor
-      if (prev[itemId]) {
+      const isCurrentlyOpen = prev[itemId];
+
+      // If closing the editor, clear editing state and scroll back
+      if (isCurrentlyOpen) {
         setEditingChordId(null);
         setInsertionContext(null);
+        scrollBackToChord();
+      } else {
+        // If opening for new chord, store scroll context
+        setScrollBackContext({
+          itemId,
+          chordId: null, // New chord, no specific chord to scroll to
+          scrollPosition: window.scrollY
+        });
+
+        // Auto-scroll to the chord editor after it opens
+        setTimeout(() => {
+          const editorElement = document.querySelector(`[data-editor-for-item="${itemId}"]`);
+          if (editorElement) {
+            editorElement.scrollIntoView({
+              behavior: 'smooth',
+              block: 'start',
+              inline: 'nearest'
+            });
+          }
+        }, 100);
       }
-      
+
       return {
         ...prev,
-        [itemId]: !prev[itemId]
+        [itemId]: !isCurrentlyOpen
       };
     });
   };
