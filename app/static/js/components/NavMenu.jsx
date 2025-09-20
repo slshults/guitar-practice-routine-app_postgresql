@@ -10,8 +10,8 @@ const NavMenu = ({ className }) => {
   const navItems = ['Practice', 'Routines', 'Items'];
 
   return (
-    <nav className={cn("flex items-center space-x-4", className)}>
-      <div className="flex space-x-4">
+    <nav className={cn("flex flex-wrap items-center gap-4", className)}>
+      <div className="flex flex-wrap gap-4">
         {navItems.map((item) => (
           <Button
             key={item}
