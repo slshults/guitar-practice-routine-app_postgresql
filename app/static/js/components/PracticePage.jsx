@@ -2754,7 +2754,7 @@ export const PracticePage = () => {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div>
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-3xl font-bold">{routine?.name}</h1>
         <div className="flex flex-col items-end gap-2">
@@ -3725,7 +3725,7 @@ export const PracticePage = () => {
 
       {/* Mixed Content Choice Modal */}
       <AlertDialog open={showMixedContentModal} onOpenChange={setShowMixedContentModal}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-80 min-h-[600px]">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center space-x-2">
               <AlertTriangle className="h-5 w-5 text-blue-500" />
@@ -3735,6 +3735,21 @@ export const PracticePage = () => {
               Your file contains both chord names and chord charts. How would you like to process it?
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-4 my-8">
+            <AlertDialogAction
+              onClick={() => handleMixedContentChoice('chord_names')}
+              className="w-full h-auto p-6 flex flex-col items-center bg-slate-700 hover:bg-slate-600 text-white"
+            >
+              <div className="font-medium">Process Chord Names</div>
+              <div className="text-sm text-slate-300 mt-1">(standard tuning)</div>
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => handleMixedContentChoice('chord_charts')}
+              className="w-full p-4 bg-slate-700 hover:bg-slate-600 text-white"
+            >
+              Import Chord Charts
+            </AlertDialogAction>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => {
               setShowMixedContentModal(false);
@@ -3742,12 +3757,6 @@ export const PracticePage = () => {
             }}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleMixedContentChoice('chord_names')}>
-              Process Chord Names
-            </AlertDialogAction>
-            <AlertDialogAction onClick={() => handleMixedContentChoice('chord_charts')}>
-              Import Chord Charts
-            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

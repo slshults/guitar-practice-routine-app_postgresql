@@ -10,7 +10,7 @@ const NavMenu = ({ className }) => {
   const navItems = ['Practice', 'Routines', 'Items'];
 
   return (
-    <nav className={cn("flex items-center space-x-4 mb-8", className)}>
+    <nav className={cn("flex items-center space-x-4", className)}>
       <div className="flex space-x-4">
         {navItems.map((item) => (
           <Button

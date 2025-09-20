@@ -34,10 +34,19 @@ const PageContent = () => {
 
 const App = () => {
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-4xl font-bold text-orange-500 mb-8">Guitar Practice Routine App</h1>
-      <NavMenu />
-      <PageContent />
+    <div className="min-h-screen">
+      {/* Fixed Header */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-gray-900">
+        <div className="container mx-auto px-4 pt-4 pb-1">
+          <h1 className="text-4xl font-bold text-orange-500 mb-2">Guitar Practice Routine App</h1>
+          <NavMenu className="mb-0" />
+        </div>
+      </div>
+
+      {/* Scrollable Content with top padding to account for fixed header */}
+      <div className="pb-4 px-4 container mx-auto" style={{paddingTop: '120px'}}>
+        <PageContent />
+      </div>
     </div>
   );
 };
