@@ -232,6 +232,76 @@ def batch_get_chord_charts():
         app.logger.error(f"Error in batch get chord charts: {str(e)}", exc_info=True)
         return jsonify({"error": f"Failed to batch get chord charts: {str(e)}"}), 500
 
+# YouTube transcript checking
+@app.route('/api/youtube/check-transcript', methods=['POST'])
+def check_youtube_transcript():
+    """Check if a YouTube video has transcripts available"""
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+        import re
+
+        data = request.get_json()
+        youtube_url = data.get('url')
+
+        if not youtube_url:
+            return jsonify({"error": "YouTube URL is required"}), 400
+
+        app.logger.info(f"[YOUTUBE] Checking transcript for YouTube URL: {youtube_url}")
+
+        # Extract video ID from YouTube URL
+        video_id = extract_youtube_video_id(youtube_url)
+        if not video_id:
+            app.logger.error(f"[YOUTUBE] Invalid YouTube URL format: {youtube_url}")
+            return jsonify({"error": "Invalid YouTube URL format"}), 400
+
+        app.logger.info(f"[YOUTUBE] Extracted video ID: {video_id}")
+
+        try:
+            # Check if transcripts are available using 2025 API syntax
+            app.logger.info(f"[YOUTUBE] Attempting to get transcript for video ID: {video_id}")
+            ytt_api = YouTubeTranscriptApi()
+            transcript_data = ytt_api.fetch(video_id)
+            app.logger.info(f"[YOUTUBE] Successfully got transcript for video ID: {video_id}")
+
+            # Extract text from transcript snippets
+            snippets = transcript_data.snippets
+            full_transcript = ' '.join([snippet.text for snippet in snippets])
+
+            app.logger.info(f"[YOUTUBE] Successfully extracted transcript for video ID: {video_id}, length: {len(full_transcript)} characters, snippets: {len(snippets)}")
+
+            return jsonify({
+                "hasTranscript": True,
+                "transcript": full_transcript
+            })
+
+        except Exception as transcript_error:
+            app.logger.error(f"[YOUTUBE] No transcripts available for video ID {video_id}: {str(transcript_error)}")
+            return jsonify({
+                "hasTranscript": False,
+                "transcript": None
+            })
+
+    except Exception as e:
+        app.logger.error(f"Error checking YouTube transcript: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to check YouTube transcript: {str(e)}"}), 500
+
+def extract_youtube_video_id(url):
+    """Extract video ID from various YouTube URL formats"""
+    import re
+
+    # Regular expression patterns for different YouTube URL formats
+    patterns = [
+        r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})',
+        r'youtube\.com\/watch\?.*?v=([a-zA-Z0-9_-]{11})',
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+
+    return None
+
 # AI chord chart creation
 @app.route('/api/autocreate-chord-charts', methods=['POST'])
 def autocreate_chord_charts():
@@ -291,6 +361,13 @@ def autocreate_chord_charts():
                     'type': 'image',
                     'data': base64.b64encode(file_data).decode('utf-8'),
                     'media_type': f'image/{file_ext if file_ext != "jpg" else "jpeg"}'
+                }
+            elif file_ext in ['txt'] or filename == 'youtube_transcript.txt':
+                # Handle text files (including YouTube transcripts) as chord_names
+                return {
+                    'name': filename,
+                    'type': 'chord_names',
+                    'data': file_data.decode('utf-8')  # Store as text, not base64
                 }
             else:
                 return {'error': f'Unsupported file type: {file_ext}'}
@@ -1061,7 +1138,9 @@ Return JSON with this exact structure:
 ```
 
 **RULES:**
-- Set "has_mixed_content": true only if files contain BOTH chord charts AND lyrics
+- Set "has_mixed_content": true ONLY if files contain BOTH visual chord diagrams AND chord names above lyrics
+- Files with only chord names above lyrics (no visual diagrams) should be "chord_names" with has_mixed_content: false
+- Files with only visual chord diagrams (no lyrics/chord names) should be "chord_charts" with has_mixed_content: false
 - "primary_type" should be the most common content type found
 - Use "high", "medium", or "low" for confidence levels
 - Provide clear reasoning for each file classification
@@ -1147,10 +1226,12 @@ Analyze the files below:"""
             else:
                 # Fallback to chord_names if no JSON found
                 app.logger.warning("Could not parse file type detection response, defaulting to chord_names")
+                # For YouTube transcripts, don't trigger mixed content modal
+                is_youtube_transcript = any(file_data.get('name') == 'youtube_transcript.txt' for file_data in uploaded_files)
                 return {
                     "primary_type": "chord_names",
-                    "has_mixed_content": True,
-                    "content_types": ["chord_names"],
+                    "has_mixed_content": not is_youtube_transcript,  # YouTube transcripts skip mixed content modal
+                    "content_types": ["chord_names"] if is_youtube_transcript else ["chord_names"],
                     "analysis": {"error": "Could not parse detection response"}
                 }
 
@@ -1161,10 +1242,12 @@ Analyze the files below:"""
     except Exception as e:
         app.logger.error(f"File type detection failed: {str(e)}")
         # Default to chord_names processing on error
+        # For YouTube transcripts, don't trigger mixed content modal
+        is_youtube_transcript = any(file_data.get('name') == 'youtube_transcript.txt' for file_data in uploaded_files)
         return {
             "primary_type": "chord_names",
-            "has_mixed_content": True,
-            "content_types": ["tablature"],
+            "has_mixed_content": not is_youtube_transcript,  # YouTube transcripts skip mixed content modal
+            "content_types": ["chord_names"] if is_youtube_transcript else ["tablature"],
             "analysis": {"error": str(e)}
         }
 
@@ -1214,7 +1297,12 @@ def analyze_files_with_claude(client, uploaded_files, item_id):
         if primary_type == 'chord_charts':
             return process_chord_charts_directly(client, uploaded_files, item_id)
         elif primary_type == 'chord_names':
-            return process_chord_names_with_lyrics(client, uploaded_files, item_id)
+            # Check if this is a YouTube transcript
+            is_youtube_transcript = any(file_data.get('name') == 'youtube_transcript.txt' for file_data in uploaded_files)
+            if is_youtube_transcript:
+                return process_chord_names_from_youtube_transcript(client, uploaded_files, item_id)
+            else:
+                return process_chord_names_with_lyrics(client, uploaded_files, item_id)
         elif primary_type == 'tablature':
             return {
                 'error': 'unsupported_format',
@@ -2005,6 +2093,195 @@ def copy_chord_charts_route():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+def process_chord_names_from_youtube_transcript(client, uploaded_files, item_id):
+    """Process YouTube transcript files to extract chord names from spoken dialogue"""
+    try:
+        app.logger.info(f"[AUTOCREATE] process_chord_names_from_youtube_transcript called with {len(uploaded_files)} files for item {item_id}")
+        app.logger.info("Processing YouTube transcript for spoken chord names")
+
+        prompt_text = """🎸 **Hey Claude! YouTube Transcript Chord Extraction**
+
+Hi there! This time I need your help with a YouTube video transcript - this is spoken dialogue from a guitar lesson video. So, it's just a voice-to-text version of the words spoken in the video. We're going to create chord charts for the song taught in the video.
+
+**Examples of what you're looking for:**
+- Chord names mentioned in spoken dialogue (like "play a G chord", "then go to C", "Am7 sounds great here")
+- References to chord progressions ("G to C to D", "the verse goes Am, F, C, G")
+- Song sections mentioned in speech ("in the chorus we play...", "for the bridge use...")
+- Spoken chord sequences ("so it's G, C, Am, F throughout")
+
+**What to IGNORE:**
+- Music theory discussions without specific chord names
+- General guitar technique talk
+- References to fret positions without chord names
+- Equipment or setup discussions
+
+**Your job:**
+- Listen for actual chord names mentioned in the dialogue
+- Group them by song sections, if mentioned (e.g. Intro, Verse, Chorus, Bridge, etc.)
+- Keep the chord charts in the order they're to be played in the song
+
+**OUTPUT FORMAT:**
+```json
+{
+  "tuning": "EADGBE",
+  "capo": 0,
+  "sections": [
+    {
+      "label": "Verse",
+      "chords": [
+        {
+          "name": "G",
+          "sourceType": "chord_names",
+          "lineBreakAfter": false
+        },
+        {
+          "name": "C",
+          "sourceType": "chord_names",
+          "lineBreakAfter": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+Key difference from lyrics sheets: Here you're reading a transcript of spoken words about chords, from a teaching video. This differs from reading chord symbols positioned above lyrics, but the output is to be similar.
+
+Important: If no chord names are actually mentioned in the transcript, respond with: "No chord names found in this transcript." (The scenario here will be video lessons of lead guitar lines, which would be about playing specific notes, instead of chords.)
+
+Thanks for helping me extract chord progressions from this voice-to-text transcript of a guitar lesson video from youtube!"""
+
+        message_content = [{
+            "type": "text",
+            "text": prompt_text
+        }]
+
+        # Add all uploaded files
+        for file_content in uploaded_files:
+            name = file_content['name']
+            message_content.append({
+                "type": "text",
+                "text": f"\n\n**FILE: {name}**"
+            })
+
+            if file_content['type'] == 'pdf':
+                message_content.append({
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": file_content['data']
+                    }
+                })
+            elif file_content['type'] == 'image':
+                message_content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": file_content['media_type'],
+                        "data": file_content['data']
+                    }
+                })
+            elif file_content['type'] == 'chord_names':
+                # Handle text files including YouTube transcripts
+                message_content.append({
+                    "type": "text",
+                    "text": file_content['data']
+                })
+
+        # Use Sonnet 4 for chord names analysis (cost-efficient)
+        app.logger.info(f"[AUTOCREATE] Using Sonnet 4 for YouTube transcript chord analysis")
+        app.logger.info(f"[AUTOCREATE] Making API call with {len(message_content)} content items")
+        app.logger.info(f"[AUTOCREATE] Message content types: {[item.get('type', 'unknown') for item in message_content]}")
+
+        try:
+            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-20250514")
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8000,  # Increased for complex songs with multiple sections
+                temperature=0.1,
+                messages=[{"role": "user", "content": message_content}]
+            )
+            app.logger.info(f"[AUTOCREATE] API call successful, response received with {len(response.content)} content items")
+            if response.content:
+                app.logger.info(f"[AUTOCREATE] Response content length: {len(response.content[0].text) if response.content[0].text else 0} characters")
+        except Exception as api_error:
+            app.logger.error(f"[AUTOCREATE] API call failed: {str(api_error)}")
+            app.logger.error(f"[AUTOCREATE] API error type: {type(api_error)}")
+            return {'error': f'Claude API call failed: {str(api_error)}'}
+
+        # Parse Claude's response
+        response_text = response.content[0].text.strip()
+        app.logger.info(f"[AUTOCREATE] Parsing Claude response for YouTube transcript chord names")
+        app.logger.info(f"[AUTOCREATE] Claude response preview: {response_text[:500]}...")
+
+        if not response_text:
+            app.logger.error("Empty response from Claude API")
+            return {'error': 'Empty response from Claude API'}
+
+        # Try to extract JSON from response (might be wrapped in markdown)
+        try:
+            # Look for JSON block in markdown
+            if '```json' in response_text:
+                json_start = response_text.find('```json') + 7
+                json_end = response_text.find('```', json_start)
+                json_text = response_text[json_start:json_end].strip()
+                app.logger.info(f"[AUTOCREATE] Found JSON in markdown, attempting to parse {len(json_text)} chars")
+                chord_data = json.loads(json_text)
+                app.logger.info(f"[AUTOCREATE] Successfully parsed JSON from markdown!")
+            else:
+                # Try to parse the entire response as JSON
+                app.logger.info(f"[AUTOCREATE] No markdown wrapper found, trying direct JSON parse")
+                chord_data = json.loads(response_text)
+                app.logger.info(f"[AUTOCREATE] Successfully parsed response as direct JSON!")
+        except json.JSONDecodeError as parse_error:
+            app.logger.error(f"[AUTOCREATE] JSON parsing failed: {str(parse_error)}")
+            app.logger.error(f"[AUTOCREATE] Failed response text: {response_text}")
+
+            # Try to extract a clean JSON block if markdown parsing failed
+            if '```json' in response_text:
+                json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+                if json_match:
+                    try:
+                        clean_json = json_match.group(1)
+                        app.logger.info(f"[AUTOCREATE] Found JSON in markdown, attempting to parse {len(clean_json)} chars")
+                        chord_data = json.loads(clean_json)
+                        app.logger.info(f"[AUTOCREATE] Successfully parsed JSON from markdown!")
+                    except json.JSONDecodeError as clean_parse_error:
+                        app.logger.error(f"[AUTOCREATE] Even markdown-extracted JSON failed to parse: {clean_parse_error}")
+                        return {'error': f'Failed to parse chord chart data - JSON truncated or malformed. Error: {str(parse_error)}'}
+            else:
+                app.logger.error(f"[AUTOCREATE] No markdown JSON blocks found in response")
+                # Check if Claude's response indicates no chords were found
+                if any(phrase in response_text.lower() for phrase in [
+                    'no chord names', 'no chords', 'doesn\'t contain chord',
+                    'if you have the actual chord', 'share that and i\'ll be happy',
+                    'chord chart or lyrics sheet', 'no chord symbols',
+                    'no chord names found in this transcript'
+                ]):
+                    return {'error': 'No chord names found in this transcript. This appears to be a guitar lesson or discussion about the song rather than lyrics with chord symbols above them. Please try a different video or upload a file with chord names above lyrics.'}
+                else:
+                    return {'error': f'Failed to parse chord chart data from analysis response: {str(parse_error)}'}
+
+        # Create chord charts from the structured data using CommonChords lookup
+        created_charts = create_chord_charts_from_data(chord_data, item_id)
+
+        # Extract filename for frontend display
+        filename = uploaded_files[0]['name'] if uploaded_files else 'unknown'
+
+        return {
+            'success': True,
+            'message': f'Successfully created {len(created_charts)} chord charts from YouTube transcript',
+            'chord_count': len(created_charts),
+            'content_type': 'youtube_transcript',
+            'uploaded_file_names': filename
+        }
+
+    except Exception as e:
+        app.logger.error(f"Error processing YouTube transcript chord names: {str(e)}")
+        return {'error': f'Failed to process YouTube transcript: {str(e)}'}
+
+
 def process_chord_names_with_lyrics(client, uploaded_files, item_id):
     """Process files with chord names above lyrics using CommonChords lookup"""
     try:
@@ -2097,6 +2374,12 @@ Thanks for helping me extract these chord progressions! This saves me tons of ti
                         "data": file_content['data']
                     }
                 })
+            elif file_content['type'] == 'chord_names':
+                # Handle text files including YouTube transcripts
+                message_content.append({
+                    "type": "text",
+                    "text": file_content['data']
+                })
 
         # Use Sonnet 4 for chord names analysis (cost-efficient)
         app.logger.info(f"[AUTOCREATE] Using Sonnet 4 for chord names analysis")
@@ -2160,7 +2443,15 @@ Thanks for helping me extract these chord progressions! This saves me tons of ti
                     return {'error': f'Failed to parse chord chart data - JSON truncated or malformed. Error: {str(parse_error)}'}
             else:
                 app.logger.error(f"[AUTOCREATE] No markdown JSON blocks found in response")
-                return {'error': f'Failed to parse chord chart data from analysis response: {str(parse_error)}'}
+                # Check if Claude's response indicates no chords were found
+                if any(phrase in response_text.lower() for phrase in [
+                    'no chord names', 'no chords', 'doesn\'t contain chord',
+                    'if you have the actual chord', 'share that and i\'ll be happy',
+                    'chord chart or lyrics sheet', 'no chord symbols'
+                ]):
+                    return {'error': 'No chord names found in this transcript. This appears to be a guitar lesson or discussion about the song rather than lyrics with chord symbols above them. Please try a different video or upload a file with chord names above lyrics.'}
+                else:
+                    return {'error': f'Failed to parse chord chart data from analysis response: {str(parse_error)}'}
 
         # Create chord charts from the structured data using CommonChords lookup
         created_charts = create_chord_charts_from_data(chord_data, item_id)

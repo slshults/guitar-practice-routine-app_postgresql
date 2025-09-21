@@ -34,6 +34,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Import at top to activate console overrides
 import '../utils/logging';
@@ -312,9 +319,9 @@ const findSimilarSongs = (sourceTitle, allItems, sourceItemId) => {
 };
 
 export const PracticePage = () => {
-  const { routine, refreshRoutine } = useActiveRoutine();
+  const { routine } = useActiveRoutine();
   const { fetchItemDetails, getItemDetails, isLoadingItem } = useItemDetails();
-  const { activePage } = useNavigation();
+  useNavigation();
   
   const { items: allItems } = usePracticeItems();
   const [expandedItems, setExpandedItems] = useState(new Set());
@@ -377,6 +384,15 @@ export const PracticePage = () => {
   // Autocreate Success modal state
   const [showAutocreateSuccessModal, setShowAutocreateSuccessModal] = useState(false);
   const [autocreateSuccessData, setAutocreateSuccessData] = useState(null);
+
+  // YouTube URL state for transcript-based chord creation
+  const [youtubeUrls, setYoutubeUrls] = useState({});
+  const [showNoTranscriptModal, setShowNoTranscriptModal] = useState(false);
+  const [noTranscriptData, setNoTranscriptData] = useState(null);
+  const [manualTranscript, setManualTranscript] = useState('');
+
+  // No chord names found modal state
+  const [showNoChordNamesModal, setShowNoChordNamesModal] = useState(false);
   
   // Rotating processing messages for entertainment
   const processingMessages = [
@@ -1229,13 +1245,19 @@ export const PracticePage = () => {
           setShowCancelConfirmation(false);
         } else if (showApiErrorModal) {
           setShowApiErrorModal(false);
+        } else if (showNoTranscriptModal) {
+          setShowNoTranscriptModal(false);
+          setNoTranscriptData(null);
+          setManualTranscript('');
+        } else if (showNoChordNamesModal) {
+          setShowNoChordNamesModal(false);
         }
       }
     };
 
     document.addEventListener('keydown', handleEscKey);
     return () => document.removeEventListener('keydown', handleEscKey);
-  }, [showCopyModal, showCopyFromModal, showDeleteChordsModal, showMixedContentModal, showUnsupportedFormatModal, showCancelConfirmation, showApiErrorModal]);
+  }, [showCopyModal, showCopyFromModal, showDeleteChordsModal, showMixedContentModal, showUnsupportedFormatModal, showCancelConfirmation, showApiErrorModal, showNoTranscriptModal, showNoChordNamesModal]);
 
   // Initialize timer for an item
   const initTimer = useCallback((itemId, duration) => {
@@ -2439,15 +2461,211 @@ export const PracticePage = () => {
   
   const handleProcessFiles = async (itemId) => {
     const files = uploadedFiles[itemId] || [];
-    
-    console.log(`[AUTOCREATE] handleProcessFiles called for item ${itemId}, files:`, files.length);
-    
-    if (files.length === 0) {
-      alert('Please add at least one file before processing.');
+    const youtubeUrl = youtubeUrls[itemId]?.trim();
+
+    console.log(`[AUTOCREATE] handleProcessFiles called for item ${itemId}, files:`, files.length, 'youtubeUrl:', youtubeUrl);
+
+    // Handle YouTube URL if provided
+    if (youtubeUrl) {
+      await handleYouTubeUrl(itemId, youtubeUrl);
       return;
     }
-    
+
+    // Handle files if provided
+    if (files.length === 0) {
+      alert('Please add at least one file or YouTube URL before processing.');
+      return;
+    }
+
     await handleFileDrop(itemId, files);
+  };
+
+  const handleYouTubeUrl = async (itemId, youtubeUrl) => {
+    console.log(`[YOUTUBE] Processing YouTube URL for item ${itemId}:`, youtubeUrl);
+
+    // Validate YouTube URL format
+    const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
+    if (!youtubeRegex.test(youtubeUrl)) {
+      alert('Please enter a valid YouTube URL');
+      return;
+    }
+
+    try {
+      // Set processing state
+      setAutocreateProgress(prev => ({ ...prev, [itemId]: 'checking_transcripts' }));
+
+      // Check for transcripts
+      const transcriptResponse = await fetch('/api/youtube/check-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: youtubeUrl })
+      });
+
+      const transcriptResult = await transcriptResponse.json();
+
+      if (transcriptResult.hasTranscript) {
+        // Process the transcript as chord_names content
+        setAutocreateProgress(prev => ({ ...prev, [itemId]: 'processing_transcript' }));
+
+        await processYouTubeTranscript(itemId, transcriptResult.transcript);
+      } else {
+        // Show no transcript modal
+        setNoTranscriptData({ itemId, youtubeUrl });
+        setShowNoTranscriptModal(true);
+        setAutocreateProgress(prev => {
+          const newState = { ...prev };
+          delete newState[itemId];
+          return newState;
+        });
+      }
+
+    } catch (error) {
+      console.error('Error processing YouTube URL:', error);
+      setApiError({ message: 'Failed to process YouTube URL. Please try again.' });
+      setShowApiErrorModal(true);
+      setAutocreateProgress(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
+      });
+    }
+  };
+
+  const processYouTubeTranscript = async (itemId, transcript) => {
+    try {
+      // Set reading transcript state for YouTube processing
+      setAutocreateProgress({ [itemId]: 'reading_transcript' });
+
+      // Use existing autocreate endpoint with chord_names type
+      const formData = new FormData();
+
+      // Add itemId to form data (not headers)
+      formData.append('itemId', itemId);
+
+      // Create a virtual file with the transcript content
+      const transcriptBlob = new Blob([transcript], { type: 'text/plain' });
+      formData.append('file0', transcriptBlob, 'youtube_transcript.txt');
+
+      // Show uploading for minimum 2 seconds, then switch to processing
+      const minDisplayTime = 2000;
+
+      setTimeout(() => {
+        setAutocreateProgress({ [itemId]: 'processing' });
+      }, minDisplayTime);
+
+      const response = await fetch('/api/autocreate-chord-charts', {
+        method: 'POST',
+        headers: { 'X-Item-Id': itemId },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create chord charts: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('[YOUTUBE] Chord charts created successfully:', result);
+
+      // Check if the result contains the "no chord names found" error
+      if (result.error && result.error.includes('No chord names found in this transcript')) {
+        // Show the "no chord names found" modal instead of success
+        setShowNoChordNamesModal(true);
+        setAutocreateProgress(prev => {
+          const newState = { ...prev };
+          delete newState[itemId];
+          return newState;
+        });
+        // Clear YouTube URL
+        setYoutubeUrls(prev => ({ ...prev, [itemId]: '' }));
+        return;
+      }
+
+      // Track autocreate chord charts success (YouTube transcript flow)
+      const routineItem = routine.items.find(item => item['B'] === itemId);
+      if (routineItem) {
+        const itemDetails = getItemDetails(itemId);
+        const itemName = itemDetails?.['C'] || `Item ${itemId}`; // Column C is Title
+
+        trackChordChartEvent('autocreated', itemName, {
+          content_type: 'youtube_transcript',
+          source: 'youtube_url'
+        });
+      }
+
+      // For YouTube transcripts, don't show success modal - just complete silently
+
+      // Force refresh chord charts for this item (same as file upload)
+      try {
+        const response2 = await fetch(`/api/items/${itemId}/chord-charts`);
+        if (response2.ok) {
+          const charts = await response2.json();
+
+          // Transform chord data from Google Sheets format to expected format
+          const transformedCharts = charts;
+
+          // Update chord charts state like manual creation does
+          setChordCharts(prev => ({
+            ...prev,
+            [itemId]: transformedCharts
+          }));
+
+          // Build sections from loaded chord charts (same logic as file upload)
+          if (transformedCharts.length === 0) {
+            setChordSections(prev => ({
+              ...prev,
+              [itemId]: []
+            }));
+          } else {
+            // Group chords by their section metadata (same logic as getChordSections)
+            const sectionMap = new Map();
+
+            transformedCharts.forEach(chart => {
+              const sectionId = chart.sectionId || 'section-1';
+              const sectionLabel = chart.sectionLabel || 'Verse';
+              const sectionRepeatCount = chart.sectionRepeatCount || '';
+
+              if (!sectionMap.has(sectionId)) {
+                sectionMap.set(sectionId, {
+                  id: sectionId,
+                  label: sectionLabel,
+                  repeatCount: sectionRepeatCount,
+                  chords: []
+                });
+              }
+
+              sectionMap.get(sectionId).chords.push(chart);
+            });
+
+            const sections = Array.from(sectionMap.values());
+            setChordSections(prev => ({
+              ...prev,
+              [itemId]: sections
+            }));
+          }
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing chord charts:', refreshError);
+        // Don't fail the whole operation if refresh fails
+      }
+
+      // Clear YouTube URL and progress state after successful processing
+      setYoutubeUrls(prev => ({ ...prev, [itemId]: '' }));
+      setAutocreateProgress(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
+      });
+
+    } catch (error) {
+      console.error('Error processing YouTube transcript:', error);
+      setApiError({ message: 'Failed to create chord charts from transcript. Please try again.' });
+      setShowApiErrorModal(true);
+      setAutocreateProgress(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
+      });
+    }
   };
 
   const handleMixedContentChoice = async (contentType) => {
@@ -3205,15 +3423,39 @@ export const PracticePage = () => {
                                               )}
                                             </div>
                                           </div>
-                                          
+
+                                          {/* YouTube URL Field */}
+                                          <div className="mt-4 mb-4">
+                                            <div className="text-center mb-2">
+                                              <p className="text-gray-400 text-sm">Or paste a YouTube URL:</p>
+                                            </div>
+                                            <input
+                                              type="url"
+                                              placeholder="https://www.youtube.com/watch?v=..."
+                                              value={youtubeUrls[itemReferenceId] || ''}
+                                              onChange={(e) => setYoutubeUrls(prev => ({
+                                                ...prev,
+                                                [itemReferenceId]: e.target.value
+                                              }))}
+                                              className="w-full p-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 text-sm"
+                                            />
+                                          </div>
+
                                           {/* Process Button */}
                                           <div className="flex justify-center">
                                             <Button
                                               variant="outline"
                                               onClick={() => handleProcessFiles(itemReferenceId)}
-                                              disabled={progress || (uploadedFiles[itemReferenceId] || []).length === 0}
+                                              disabled={progress || (
+                                                // Must have either files or YouTube URL, but not both
+                                                (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() ||
+                                                (uploadedFiles[itemReferenceId] || []).length > 0 && youtubeUrls[itemReferenceId]?.trim()
+                                              )}
                                               className={`px-6 ${
-                                                progress || (uploadedFiles[itemReferenceId] || []).length === 0
+                                                progress || (
+                                                  (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() ||
+                                                  (uploadedFiles[itemReferenceId] || []).length > 0 && youtubeUrls[itemReferenceId]?.trim()
+                                                )
                                                   ? 'border-gray-600 text-gray-500 cursor-not-allowed'
                                                   : 'border-blue-600 text-blue-300 hover:bg-blue-800'
                                               }`}
@@ -3230,11 +3472,65 @@ export const PracticePage = () => {
                                             className="w-full p-6 border-2 border-dashed rounded-lg mt-4 bg-gray-800/50 border-gray-600"
                                           >
                                             <div className="text-center">
+                                              {progress === 'checking_transcripts' && (
+                                                <div className="space-y-3">
+                                                  <div className="flex items-center justify-center space-x-2">
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-500"></div>
+                                                    <span className="text-yellow-400">Checking for transcripts...</span>
+                                                  </div>
+                                                  <br />
+                                                  <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleShowCancelConfirmation(itemReferenceId)}
+                                                    className="text-gray-400 hover:text-gray-200 border-gray-600"
+                                                  >
+                                                    <X className="h-3 w-3 mr-1" />
+                                                    Cancel
+                                                  </Button>
+                                                </div>
+                                              )}
+                                              {progress === 'reading_transcript' && (
+                                                <div className="space-y-3">
+                                                  <div className="flex items-center justify-center space-x-2">
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                                    <span className="text-blue-400">Reading transcript...</span>
+                                                  </div>
+                                                  <br />
+                                                  <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleShowCancelConfirmation(itemReferenceId)}
+                                                    className="text-gray-400 hover:text-gray-200 border-gray-600"
+                                                  >
+                                                    <X className="h-3 w-3 mr-1" />
+                                                    Cancel
+                                                  </Button>
+                                                </div>
+                                              )}
                                               {progress === 'uploading' && (
                                                 <div className="space-y-3">
                                                   <div className="flex items-center justify-center space-x-2">
                                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
                                                     <span className="text-blue-400">Uploading files...</span>
+                                                  </div>
+                                                  <br />
+                                                  <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleShowCancelConfirmation(itemReferenceId)}
+                                                    className="text-gray-400 hover:text-gray-200 border-gray-600"
+                                                  >
+                                                    <X className="h-3 w-3 mr-1" />
+                                                    Cancel
+                                                  </Button>
+                                                </div>
+                                              )}
+                                              {progress === 'processing_transcript' && (
+                                                <div className="space-y-3">
+                                                  <div className="flex items-center justify-center space-x-2">
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                                                    <span className="text-purple-400">Processing transcript...</span>
                                                   </div>
                                                   <br />
                                                   <Button
@@ -3871,6 +4167,92 @@ export const PracticePage = () => {
         }}
         autocreateData={autocreateSuccessData}
       />
+
+      {/* No Transcript Modal */}
+      {showNoTranscriptModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-gray-700 rounded-lg p-6 w-full max-w-md max-h-[80vh] flex flex-col">
+            <h2 className="text-xl font-bold text-white mb-4">
+              No Transcripts Available
+            </h2>
+
+            <p className="text-gray-300 mb-4">
+              Oh, drag. This YouTube video doesn't have transcripts on it. So, go find a free tool to generate transcripts from YouTube videos, then copy/paste the transcript below:
+            </p>
+
+            <textarea
+              value={manualTranscript}
+              onChange={(e) => setManualTranscript(e.target.value)}
+              placeholder="Paste the transcript here..."
+              className="w-full h-32 p-3 bg-gray-800 text-white rounded border border-gray-600 focus:border-red-500 resize-none mb-4"
+              maxLength={25000}
+            />
+
+            <p className="text-xs text-gray-400 mb-4">
+              {manualTranscript.length}/25,000 characters
+            </p>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowNoTranscriptModal(false);
+                  setNoTranscriptData(null);
+                  setManualTranscript('');
+                }}
+                className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-600"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!manualTranscript.trim()) {
+                    alert('Please paste a transcript before proceeding.');
+                    return;
+                  }
+
+                  const { itemId } = noTranscriptData;
+                  setShowNoTranscriptModal(false);
+                  setNoTranscriptData(null);
+
+                  await processYouTubeTranscript(itemId, manualTranscript);
+                  setManualTranscript('');
+                }}
+                disabled={!manualTranscript.trim()}
+                className={`flex-1 ${
+                  !manualTranscript.trim()
+                    ? 'border-gray-600 text-gray-500 cursor-not-allowed'
+                    : 'border-blue-600 text-blue-300 hover:bg-blue-800'
+                }`}
+              >
+                <Wand className="h-4 w-4 mr-2" />
+                🪄 Create chord charts
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Chord Names Found Modal */}
+      <Dialog open={showNoChordNamesModal} onOpenChange={(open) => !open && setShowNoChordNamesModal(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-6 w-6 text-orange-500" />
+              No Chord Names Found
+            </DialogTitle>
+            <DialogDescription className="text-left space-y-1">
+              <p>So, um, we can't find any chord names mentioned in this video. Sorry, we can't create tablature yet, just chord charts.</p>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 -mt-2">
+            <Button onClick={() => setShowNoChordNamesModal(false)} className="min-w-20">
+              Ok
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }; 
