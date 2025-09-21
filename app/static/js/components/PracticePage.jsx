@@ -248,7 +248,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
         </button>
       )}
       
-      <div className="relative w-full h-48 mx-auto flex items-center justify-center overflow-hidden">
+      <div className="relative w-full h-36 mx-auto flex items-center justify-center overflow-hidden">
         <div 
           ref={chartRef}
           className="w-full h-full"
@@ -1101,6 +1101,114 @@ export const PracticePage = () => {
         return aTitle.localeCompare(bTitle);
       });
   }, [allItems, copySourceItemId, copySearchTerm, similarItemIds]);
+
+  // Memoized similar items calculation for copy FROM modal (copied from working copy TO logic)
+  const similarItemIdsForCopyFrom = useMemo(() => {
+    if (!copyFromTargetItemId || !allItems) return new Set();
+
+    // Get target item for "copy from" modal - copyFromTargetItemId is the destination
+    const targetItem = allItems.find(item => item['B'] === copyFromTargetItemId);
+    const targetTitle = targetItem?.['C'] || '';
+    const allFilteredItems = allItems.filter(item => item['B'] !== copyFromTargetItemId);
+
+    return new Set(
+      findSimilarSongs(targetTitle, allFilteredItems, copyFromTargetItemId).map(item => item['A'])
+    );
+  }, [copyFromTargetItemId, allItems]);
+
+  // Filtered and sorted items for copy FROM modal (copied from working copy TO logic)
+  const sortedAndFilteredCopyFromItems = useMemo(() => {
+    if (!allItems) return [];
+
+    return allItems
+      .filter(item => {
+        // Filter out the target item
+        if (item['B'] === copyFromTargetItemId) return false;
+
+        // Filter by search term
+        if (copyFromSearchTerm.trim()) {
+          const title = item['C'] || '';
+
+          const normalizedTitle = normalizeText(title);
+          const normalizedSearch = normalizeText(copyFromSearchTerm);
+
+          // Handle empty search after normalization
+          if (!normalizedSearch) return true;
+
+          return normalizedTitle.includes(normalizedSearch);
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        // If there's an active search term, only sort alphabetically to respect search results
+        if (copyFromSearchTerm.trim()) {
+          const aTitle = a['C'] || '';
+          const bTitle = b['C'] || '';
+          return aTitle.localeCompare(bTitle);
+        }
+
+        // Check if items are similar to target using pre-calculated set
+        const aIsSimilar = similarItemIdsForCopyFrom.has(a['A']);
+        const bIsSimilar = similarItemIdsForCopyFrom.has(b['A']);
+
+        // Sort similar songs to the top (only when no search term)
+        if (aIsSimilar && !bIsSimilar) return -1;
+        if (!aIsSimilar && bIsSimilar) return 1;
+
+        // Within each group (similar/non-similar), sort alphabetically
+        const aTitle = a['C'] || '';
+        const bTitle = b['C'] || '';
+        return aTitle.localeCompare(bTitle);
+      });
+  }, [allItems, copyFromTargetItemId, copyFromSearchTerm, similarItemIdsForCopyFrom]);
+
+  // State to track chord chart counts for all items (for Copy FROM modal)
+  const [allItemChordCounts, setAllItemChordCounts] = useState({});
+
+  // Load chord chart counts for all items when Copy FROM modal opens
+  useEffect(() => {
+    if (showCopyFromModal && allItems && Object.keys(allItemChordCounts).length === 0) {
+      const loadAllChordCounts = async () => {
+        const counts = {};
+
+        // Get all unique item IDs
+        const itemIds = allItems.map(item => item['B']);
+
+        try {
+          // Use batch API to get chord charts efficiently
+          const response = await fetch('/api/chord-charts/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_ids: itemIds })
+          });
+
+          if (response.ok) {
+            const batchResults = await response.json();
+
+            // Count charts for each item
+            Object.entries(batchResults).forEach(([itemId, charts]) => {
+              counts[itemId] = (charts || []).length;
+            });
+
+            setAllItemChordCounts(counts);
+          }
+        } catch (error) {
+          console.error('Error loading chord chart counts:', error);
+        }
+      };
+
+      loadAllChordCounts();
+    }
+  }, [showCopyFromModal, allItems, allItemChordCounts]);
+
+  // Apply chord chart filtering using the loaded counts
+  const copyFromItemsWithCharts = useMemo(() => {
+    return sortedAndFilteredCopyFromItems.filter(item => {
+      const itemReferenceId = item['B'];
+      return allItemChordCounts[itemReferenceId] > 0;
+    });
+  }, [sortedAndFilteredCopyFromItems, allItemChordCounts]);
 
   // Esc key handler for closing modals
   useEffect(() => {
@@ -2130,35 +2238,10 @@ export const PracticePage = () => {
     // Stay in the modal, return to item selection
   };
 
-  // Copy from modal functions
-  const handleOpenCopyFromModal = async (itemId) => {
+  // Copy from modal functions (simplified to match working copy TO modal)
+  const handleOpenCopyFromModal = (itemId) => {
     console.log('Opening copy from modal for item:', itemId);
     setCopyFromTargetItemId(itemId);
-
-    // Load chord charts for items that have them (filter to only items with chord charts)
-    const itemsWithCharts = [];
-
-    if (allItems && allItems.length > 0) {
-      for (const item of allItems) {
-        const itemReferenceId = item['B']; // ItemID
-        if (itemReferenceId && itemReferenceId !== itemId) { // Don't include current item
-          try {
-            const response = await fetch(`/api/items/${itemReferenceId}/chord-charts`);
-            if (response.ok) {
-              const charts = await response.json();
-              if (charts.length > 0) {
-                itemsWithCharts.push(item);
-                setChordCharts(prev => ({ ...prev, [itemReferenceId]: charts }));
-              }
-            }
-          } catch (error) {
-            console.error(`Error loading chord charts for item ${itemReferenceId}:`, error);
-          }
-        }
-      }
-    }
-
-    console.log(`Found ${itemsWithCharts.length} items with chord charts`);
     setShowCopyFromModal(true);
     setCopyFromSearchTerm('');
     setSelectedSourceItem(null);
@@ -2169,6 +2252,7 @@ export const PracticePage = () => {
     setCopyFromTargetItemId(null);
     setCopyFromSearchTerm('');
     setSelectedSourceItem(null);
+    setAllItemChordCounts({}); // Clear chord count cache
   };
 
   const handleConfirmCopyFrom = async () => {
@@ -2715,44 +2799,6 @@ export const PracticePage = () => {
   };
 
 
-  const toggleChordEditor = (itemId, e) => {
-    e?.stopPropagation();
-    setShowChordEditor(prev => {
-      const isCurrentlyOpen = prev[itemId];
-
-      // If closing the editor, clear editing state and scroll back
-      if (isCurrentlyOpen) {
-        setEditingChordId(null);
-        setInsertionContext(null);
-        scrollBackToChord();
-      } else {
-        // If opening for new chord, store scroll context
-        setScrollBackContext({
-          itemId,
-          chordId: null, // New chord, no specific chord to scroll to
-          scrollPosition: window.scrollY
-        });
-
-        // Auto-scroll to the chord editor after it opens
-        setTimeout(() => {
-          const editorElement = document.querySelector(`[data-editor-for-item="${itemId}"]`);
-          if (editorElement) {
-            editorElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'start',
-              inline: 'nearest'
-            });
-          }
-        }, 100);
-      }
-
-      return {
-        ...prev,
-        [itemId]: !isCurrentlyOpen
-      };
-    });
-  };
-
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
@@ -3000,9 +3046,9 @@ export const PracticePage = () => {
                                   });
                                   
                                   return chordRows.map((row, rowIndex) => (
-                                    <div 
+                                    <div
                                       key={rowIndex}
-                                      className="grid grid-cols-5 gap-2" 
+                                      className="grid grid-cols-5 gap-2"
                                       style={{
                                         display: 'grid',
                                         gridTemplateColumns: 'repeat(5, 1fr)',
@@ -3323,19 +3369,19 @@ export const PracticePage = () => {
                                 + Add New Section
                               </Button>
 
-                              {/* Copy buttons on same row */}
-                              <div className="flex gap-2 mb-4 w-full">
+                              {/* Copy buttons - responsive: side-by-side on desktop, stacked on mobile */}
+                              <div className="flex flex-col sm:flex-row gap-2 mb-4 w-full">
                                 <Button
                                   variant="outline"
                                   onClick={() => handleOpenCopyFromModal(itemReferenceId)}
-                                  className="w-1/2 border-blue-600 text-blue-300 hover:bg-blue-800"
+                                  className="w-full sm:w-1/2 border-blue-600 text-blue-300 hover:bg-blue-800"
                                 >
                                   Copy chord charts from other song
                                 </Button>
                                 <Button
                                   variant="outline"
                                   onClick={() => handleOpenCopyModal(itemReferenceId)}
-                                  className="w-1/2 border-purple-600 text-purple-300 hover:bg-purple-800"
+                                  className="w-full sm:w-1/2 border-purple-600 text-purple-300 hover:bg-purple-800"
                                 >
                                   Copy chord charts to other song
                                 </Button>
@@ -3651,13 +3697,7 @@ export const PracticePage = () => {
 
             {/* Scrollable song list - only items with chord charts */}
             <div className="flex-1 overflow-y-auto mb-4 min-h-0 modal-scroll">
-              {allItems?.filter(item => {
-                const itemReferenceId = item['B'];
-                const hasCharts = chordCharts[itemReferenceId] && chordCharts[itemReferenceId].length > 0;
-                const matchesSearch = copyFromSearchTerm === '' ||
-                  item['C']?.toLowerCase().includes(copyFromSearchTerm.toLowerCase());
-                return hasCharts && matchesSearch && itemReferenceId !== copyFromTargetItemId;
-              }).map(item => (
+              {copyFromItemsWithCharts.map(item => (
                 <div key={item['A']} className="flex items-center mb-2">
                   <input
                     type="radio"
@@ -3673,7 +3713,7 @@ export const PracticePage = () => {
                   >
                     {item['C'] || 'Unknown Song'}
                     <span className="text-xs text-gray-400 ml-2">
-                      ({(chordCharts[item['B']] || []).length} charts)
+                      ({allItemChordCounts[item['B']] || 0} charts)
                     </span>
                   </label>
                 </div>

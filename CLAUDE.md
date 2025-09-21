@@ -615,4 +615,26 @@ IMPORTANT:
 
 - Contextual reminder: In guitar we count strings in order from high pitch to low, so the string on the right side of our charts is string one. Likewise with frets, so fret one is at the top, and when we go "up" a fret, that means the next fret downward on the chart
 
+## UI/UX Development Patterns
+
+### Responsive Button Pairs
+For button pairs that need to stack on mobile but stay side-by-side on desktop:
+```jsx
+<div className="flex flex-col sm:flex-row gap-2 mb-4 w-full">
+  <Button className="w-full sm:w-1/2">Button 1</Button>
+  <Button className="w-full sm:w-1/2">Button 2</Button>
+</div>
+```
+
+### Browser Navigation Enhancement
+To add back/forward button support to SPA navigation, enhance NavigationContext with URL hash sync:
+- Use `window.location.hash` for page state
+- Add `popstate` listener for back/forward detection
+- Update URL with `window.history.pushState()` on navigation changes
+- Initialize from URL hash on page load
+
+### Performance Anti-Patterns
+**Avoid**: Including mutable objects like `chordCharts` in useMemo dependencies - causes infinite re-render loops
+**Fix**: Separate mutable object filtering from memoized logic, or use more stable dependencies
+
 Anon, we rock n roll 🙌🤘🎸...
