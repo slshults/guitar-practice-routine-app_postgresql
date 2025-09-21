@@ -238,32 +238,6 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
         </DialogHeader>
 
         <div className="flex gap-8 h-[60vh]">
-          {/* Available Items */}
-          <Card className="w-1/2 bg-gray-900">
-            <CardHeader>
-              <CardTitle>Available Items</CardTitle>
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                <Input
-                  className="pl-9"
-                  placeholder="Search items..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  autocomplete="off"
-                />
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4 overflow-y-auto h-[calc(100%-100px)]">
-              {availableItems.map(item => (
-                <AvailableItem
-                  key={item['A']}
-                  item={item}
-                  onAdd={handleAddItem}
-                />
-              ))}
-            </CardContent>
-          </Card>
-
           {/* Selected Items */}
           <Card className="w-1/2 bg-gray-900">
             <CardHeader>
@@ -299,6 +273,32 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
                   </div>
                 </SortableContext>
               </DndContext>
+            </CardContent>
+          </Card>
+
+          {/* Available Items */}
+          <Card className="w-1/2 bg-gray-900">
+            <CardHeader>
+              <CardTitle>Available Items</CardTitle>
+              <div className="relative">
+                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
+                <Input
+                  className="pl-9"
+                  placeholder="Search items..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autocomplete="off"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4 overflow-y-auto h-[calc(100%-100px)]">
+              {availableItems.map(item => (
+                <AvailableItem
+                  key={item['A']}
+                  item={item}
+                  onAdd={handleAddItem}
+                />
+              ))}
             </CardContent>
           </Card>
         </div>

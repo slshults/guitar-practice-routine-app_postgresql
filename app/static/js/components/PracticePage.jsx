@@ -3034,21 +3034,29 @@ export const PracticePage = () => {
                               
                               {/* Add new section button */}
                               {/* Toggle for chord editor */}
-                              {/* Print button - floating above Add New Chord */}
-                              <div className="flex justify-end mb-2">
-                                <Button
-                                  variant="outline" 
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handlePrintChords(itemReferenceId);
-                                  }}
-                                  className="p-2 border-gray-600 text-gray-400 hover:text-gray-200 hover:bg-gray-600"
-                                  title="Print chord charts"
-                                >
-                                  <Printer className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              {/* Print button - floating above Add New Chord - only show if chord charts exist */}
+                              {(() => {
+                                const existingCharts = chordCharts[itemReferenceId] || [];
+                                if (existingCharts.length > 0) {
+                                  return (
+                                    <div className="flex justify-end mb-2">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handlePrintChords(itemReferenceId);
+                                        }}
+                                        className="p-2 border-gray-600 text-gray-400 hover:text-gray-200 hover:bg-gray-600"
+                                        title="Print chord charts"
+                                      >
+                                        <Printer className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
 
                               {/* Autocreate from files - collapsible section */}
                               {(() => {
@@ -3316,18 +3324,18 @@ export const PracticePage = () => {
                               </Button>
 
                               {/* Copy buttons on same row */}
-                              <div className="flex gap-2 mb-4">
+                              <div className="flex gap-2 mb-4 w-full">
                                 <Button
                                   variant="outline"
                                   onClick={() => handleOpenCopyFromModal(itemReferenceId)}
-                                  className="flex-1 border-blue-600 text-blue-300 hover:bg-blue-800"
+                                  className="w-1/2 border-blue-600 text-blue-300 hover:bg-blue-800"
                                 >
                                   Copy chord charts from other song
                                 </Button>
                                 <Button
                                   variant="outline"
                                   onClick={() => handleOpenCopyModal(itemReferenceId)}
-                                  className="flex-1 border-purple-600 text-purple-300 hover:bg-purple-800"
+                                  className="w-1/2 border-purple-600 text-purple-300 hover:bg-purple-800"
                                 >
                                   Copy chord charts to other song
                                 </Button>

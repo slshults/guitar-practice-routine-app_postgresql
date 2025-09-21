@@ -151,6 +151,13 @@ The `gpr.sh` script runs:
 2. Vite build watcher for frontend assets
 3. Python file watcher for backend changes
 
+### Sticky Header Implementation
+The app uses a fixed header system for persistent navigation:
+- **Fixed positioning**: `fixed top-0 left-0 right-0 z-50` keeps header visible during scroll
+- **Dynamic height calculation**: JavaScript measures actual header height and adjusts content padding
+- **Responsive wrapping**: Navigation uses `flex-wrap` to stack buttons on mobile screens
+- **Critical issue**: Large Tailwind padding classes (`pt-28`, `pt-36`) may not compile - use inline styles for reliable padding: `style={{paddingTop: '160px'}}`
+
 ### Authentication Flow
 - Legacy: OAuth2 flow for Google Sheets access (being removed)
 - New authentication system: To be determined for PostgreSQL version
