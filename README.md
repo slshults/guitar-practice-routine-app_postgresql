@@ -1,43 +1,47 @@
-# Guitar Practice Routine Assistant (PostgreSQL)
+# Guitar Practice Routine Assistant
 
-A web application that helps guitar players manage practice routines, create and organize chord charts, and track practice progress using PostgreSQL as the database backend.
+A web app for guitar players to manage practice routines, create chord charts, and track practice progress. 
+This version uses PostgreSQL as the database backend.
 
-**Note**: This is the PostgreSQL port of the original [Google Sheets-based version](https://github.com/slshults/guitar-practice-routine-app_sheets). The application supports both PostgreSQL and Google Sheets backends through a unified DataLayer abstraction.
+**Note**: If you prefer a slower Google Sheets-based version (no local database required), check out the [original Google Sheets version](https://github.com/slshults/guitar-practice-routine-app_sheets).
 
-## Features
+## Feature Highlights
 
 ### Practice Session Management
 - **Timer-based practice sessions** with customizable durations for each item
 - **Progress tracking** - mark items as complete during practice
 - **Organized routines** with drag-and-drop reordering
 - **Visual progress indicators** showing completion status
+- **Drag n drop** to rearrange items in a routine
 
 ### Chord Chart System
 - **Interactive chord chart editor** with click-to-place finger positions
 - **Section organization** - organize chords by song sections (Verse, Chorus, etc.)
 - **SVGuitar integration** for professional chord diagram rendering
-- **Autocreate feature** - upload PDFs or images to automatically generate chord charts using Claude AI
-- **Shared chord charts** - charts can belong to multiple songs via comma-separated ItemIDs
-- **CommonChords database** with 12,700+ pre-defined chord patterns
+- **Autocreate feature** - upload PDFs or images, or paste the URL for a YouTube lesson video, to automatically generate chord charts using Claude AI
+- **Shared chord charts** - charts can be used on multiple instances of the same song (for different focus during different practice routines)
+- **CommonChords database** 12,700+ pre-defined chord patterns, and/or create your own
 
 ### Data Management
-- **Dual-mode architecture** - switch between PostgreSQL and Google Sheets backends
+- **PostgreSQL database** - reliable, fast local storage
 - **Complete CRUD operations** for routines, items, and chord charts
-- **Exact data preservation** from Google Sheets migration
 - **Section metadata** stored within chord data for organization
-- **Order preservation** maintaining physical insertion order from original sheets
+- **Cross-platform support** - works on Windows (WSL2), macOS, and Linux
+- **Local songbook folder links** - quick access to files on your local from links in the app
 
-### AI Integration
-- **Autocreate chord charts** from uploaded files (PDFs, images)
+### Optional auto-creation of chord charts with help from Claude AI
+- **Autocreate chord charts** from lyrics sheets with chord names, existing chord charts, or YouTube lesson URLs
 - **Three processing paths**: Visual chord diagrams, chord names above lyrics, and tablature notation
-- **Hybrid model approach** - Opus 4.1 for visual analysis, Sonnet 4 for text processing
-- **Cost-efficient processing** with smart model selection
+- **Smart model selection** - optimized for accuracy and cost efficiency
+- **Optional feature** - requires Anthropic API key
 
-## Getting Started
+### Track your practice time in-depth
+- **PostHog analytics built-in** - optional practice history tracking via PostHog. Works with the free level, project API key required. Track your stuff however you like.
+
+# Getting Started
 
 ### Prerequisites
 
-#### Option 1: PostgreSQL Setup (Recommended)
 - **PostgreSQL 12+** installed and running
 - **Python 3.8+**
 - **Node.js 16+** and npm
@@ -47,12 +51,6 @@ Install PostgreSQL:
 - **Windows**: https://www.postgresql.org/download/windows/
 - **macOS**: https://www.postgresql.org/download/macosx/
 - **Linux**: https://www.postgresql.org/download/linux/
-
-#### Option 2: Google Sheets Fallback
-- **Google Cloud Project** with Sheets API enabled
-- **OAuth2 credentials** for Google Sheets access
-- **Python 3.8+**
-- **Node.js 16+** and npm
 
 ### Installation
 
@@ -83,8 +81,6 @@ Install PostgreSQL:
    ```
 
 4. **Database Setup**
-
-   **Option A: PostgreSQL (Recommended)**
    ```bash
    # Create database and user
    sudo -u postgres psql
@@ -92,39 +88,26 @@ Install PostgreSQL:
    CREATE USER guitar_user WITH PASSWORD 'your_password';
    GRANT ALL PRIVILEGES ON DATABASE guitar_practice TO guitar_user;
    \q
-   
+
    # Set environment variables
    cp .env.template .env
    # Edit .env and set:
    DATABASE_URL=postgresql://guitar_user:your_password@localhost/guitar_practice
-   MIGRATION_MODE=postgres
    ```
 
-   **Option B: Google Sheets Fallback**
+5. **Initialize Database**
    ```bash
-   cp .env.template .env
-   # Edit .env and set:
-   MIGRATION_MODE=sheets
-   # Add your Google OAuth credentials
+   # Create tables and load demo data
+   psql -d guitar_practice -f schema.sql
+   psql -d guitar_practice -f demo_data.sql
    ```
 
-5. **Initialize Database** (PostgreSQL only)
-   ```bash
-   # Create tables
-   python -c "from app.database import create_tables; create_tables()"
-   
-   # Optional: Migrate existing Google Sheets data
-   python migrate_items.py
-   python migrate_routines.py  
-   python migrate_chord_charts.py
-   ```
-
-6. **Configure Environment Variables**
+6. **Configure Optional Features**
    ```bash
    # Optional: For autocreate chord charts feature
    ANTHROPIC_API_KEY=your_anthropic_api_key
-   
-   # Optional: For PostHog analytics
+
+   # Optional: For practice history analytics
    POSTHOG_API_KEY=your_posthog_key
    ```
 
@@ -143,104 +126,37 @@ npm run watch
 
 Open your browser to `http://localhost:5000`
 
-## PostgreSQL Database Schema
+Leave a comment if you run into errors. (Can't guarantee any support though, this is a hobby project.)
 
-### Core Tables
+## Database Schema
 
-```sql
--- Practice items (exercises, songs, techniques)
-CREATE TABLE items (
-    id INTEGER PRIMARY KEY,
-    item_id VARCHAR(50),          -- Google Sheets ItemID for compatibility
-    title VARCHAR(255) NOT NULL,
-    notes TEXT,
-    duration VARCHAR(50),
-    description TEXT,
-    order_col INTEGER DEFAULT 0,
-    tuning VARCHAR(50),
-    songbook VARCHAR(255),
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+The application uses PostgreSQL with the following main tables:
 
--- Practice routines metadata
-CREATE TABLE routines (
-    id INTEGER PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    created_at TIMESTAMP DEFAULT NOW(),
-    order_col INTEGER DEFAULT 0
-);
+- **`items`** - Practice items (songs, exercises, techniques)
+- **`routines`** - Practice routine collections, made up of items
+- **`routine_items`** - Junction table linking routines to items
+- **`chord_charts`** - Chord diagrams with section organization
+- **`active_routine`** - Tracks currently selected routine
+- **`common_chords`** - Database of 12,700+ predefined chord patterns
 
--- Junction table for routine-item relationships  
-CREATE TABLE routine_items (
-    id INTEGER PRIMARY KEY,
-    routine_id INTEGER REFERENCES routines(id),
-    item_id INTEGER REFERENCES items(id),
-    order_col INTEGER DEFAULT 0,
-    completed BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+### Demo Data
 
--- Chord diagrams with section metadata
-CREATE TABLE chord_charts (
-    chord_id INTEGER PRIMARY KEY,
-    item_id TEXT NOT NULL,        -- Supports comma-separated ItemIDs
-    title VARCHAR(255) NOT NULL,  -- Chord name (e.g., "D", "G", "Am7")
-    chord_data JSON NOT NULL,     -- SVGuitar data + section metadata  
-    created_at TIMESTAMP DEFAULT NOW(),
-    order_col INTEGER DEFAULT 0
-);
+The application includes demo data to get you started:
 
--- Tracks currently active routine
-CREATE TABLE active_routine (
-    id INTEGER PRIMARY KEY,
-    routine_id INTEGER REFERENCES routines(id),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
-```
+- **Sample routine**: "Songs" with one practice item
+- **Sample song**: "For What It's Worth" with E, D, A, A7 chord charts
+- **Organized sections**: Chords grouped by song section (Chorus)
+- **Local folder path**: Example songbook folder path structure
 
-### Example Data
-
-#### Sample Routine
-```sql
-INSERT INTO routines (id, name) VALUES 
-(1, 'Daily Practice Routine');
-
-INSERT INTO items (id, item_id, title, duration, tuning) VALUES
-(1, '107', 'Practice Should I Stay or Should I Go (relearning)', '5', 'EADGBE');
-
-INSERT INTO routine_items (routine_id, item_id, order_col) VALUES
-(1, 1, 0);
-```
-
-#### Sample Chord Chart
-```sql
-INSERT INTO chord_charts (chord_id, item_id, title, chord_data) VALUES
-(292, '107', 'D', '{
-  "fingers": [[3, 2, null], [2, 3, null], [1, 2, null]],
-  "barres": [],
-  "tuning": "EADGBE", 
-  "capo": 0,
-  "startingFret": 1,
-  "numFrets": 5,
-  "numStrings": 6,
-  "openStrings": [],
-  "mutedStrings": [6, 5],
-  "sectionId": "section-1754960333032",
-  "sectionLabel": "Intro", 
-  "sectionRepeatCount": "",
-  "hasLineBreakAfter": false
-}');
-```
+The complete schema and demo data are provided in `schema.sql` and `demo_data.sql` files.
 
 ## Architecture
 
 ### Backend (Flask + PostgreSQL)
 - **Flask application** with RESTful API endpoints
-- **SQLAlchemy ORM** with PostgreSQL database  
-- **DataLayer abstraction** for dual-mode support (postgres/sheets)
-- **Service layer** for business logic (ItemService, ChordChartService, etc.)
-- **Repository layer** for data access with Google Sheets format compatibility
+- **SQLAlchemy ORM** with PostgreSQL database
+- **Service layer** for logic (ItemService, ChordChartService, etc.)
+- **Repository layer** for data access and management
 
 ### Frontend (React + Vite)
 - **React 18.2.0** with functional components and hooks
@@ -251,9 +167,9 @@ INSERT INTO chord_charts (chord_id, item_id, title, chord_data) VALUES
 
 ### Key Components
 - `PracticePage.jsx` - Main practice session interface
-- `ChordChartEditor.jsx` - Interactive chord diagram editor  
+- `ChordChartEditor.jsx` - Interactive chord diagram editor
 - `ChordGrid.jsx` - Chord chart display component
-- `DataLayer` - Unified interface for postgres/sheets backends
+- `DataLayer` - Database abstraction and service layer
 
 ## API Endpoints
 
@@ -280,25 +196,23 @@ INSERT INTO chord_charts (chord_id, item_id, title, chord_data) VALUES
 
 ## Usage Tips
 
-### Practice Sessions
-1. **Select or create a routine** from the main page
-2. **Set it as active** to begin practice
-3. **Use timers** to track practice duration for each item
-4. **Mark items complete** as you finish them
-5. **View chord charts** by expanding the chord section
+### Start with items
+- **Create items**: on the `Items` page. Create some of your own, or start with the included "For What It's Worth" example (Chorus only included, to avoid copyright complaints)
+  - **Local folders**: optional: set songbook paths to link to your guitar files
+- **Create a routine**: on the Routines page, or start with the include demo routine. Add items to your routine, drag and drop to reorder
+- **Set an active routine**: It'll show up on the `Practice` page
+
+### Practice
+- **Use timers** to track practice duration for each item
+- **Mark items complete** as you finish them
+- **Chord charts** Create or view by expanding the chord chart section in an item
 
 ### Chord Chart Management
 1. **Toggle "Add New Chord"** to open the interactive editor
 2. **Click on fret positions** to place fingers
 3. **Organize chords by sections** (Verse, Chorus, etc.)
 4. **Use autocreate** to generate charts from PDFs or images
-5. **Copy chord charts** between songs to avoid duplication
-
-### Data Migration
-- **From Google Sheets**: Use provided migration scripts
-- **Preserve order**: Physical insertion order maintained from sheets
-- **Comma-separated ItemIDs**: Shared chord charts supported
-- **Section metadata**: Preserved within chord data JSON
+5. **Copy chord charts** between songs (useful if you focus on different aspects of a song in different routines. Just create multiple items for that song, for use in different routines) 
 
 ## Development
 
@@ -311,16 +225,15 @@ app/
 ├── static/css/              # Compiled CSS
 ├── templates/               # Jinja2 templates
 ├── models.py               # SQLAlchemy models
-├── data_layer.py           # Unified data abstraction
+├── data_layer.py           # Database abstraction layer
 ├── services/               # Business logic layer
 ├── repositories/           # Data access layer
 └── routes.py               # Flask API endpoints
 
-migrations/                  # Database migration scripts
-├── migrate_items.py
-├── migrate_routines.py
-└── migrate_chord_charts.py
+schema.sql                   # Database schema
+demo_data.sql               # Sample data for new installations
 ```
+CLAUDE.md file included (useful if you like to work with Claude Code)
 
 ### Common Commands
 ```bash
@@ -330,32 +243,14 @@ migrations/                  # Database migration scripts
 # Build production assets
 npm run build
 
-# Database migrations
-python migrate_items.py --clear --force
-python migrate_routines.py --clear --force  
-python migrate_chord_charts.py --clear --force
+# Database setup (for new installations)
+psql -d guitar_practice -f schema.sql
+psql -d guitar_practice -f demo_data.sql
 
 # Linting and formatting
 npm run lint
 python -m flake8 app/
 ```
-
-## Troubleshooting
-
-### Database Issues
-- **Connection errors**: Check `DATABASE_URL` in `.env`
-- **Migration failures**: Ensure database exists and user has permissions
-- **Data inconsistencies**: Verify ItemID mappings between tables
-
-### Frontend Issues  
-- **Chord charts not loading**: Check browser console for API errors
-- **SVGuitar rendering problems**: Verify chord data format in database
-- **Section organization**: Ensure section metadata is preserved in chord_data JSON
-
-### Performance
-- **Slow chord chart loading**: Check database indexes on `item_id` and `order_col`
-- **API timeouts**: Consider pagination for large datasets
-- **Frontend bundling**: Use `npm run build` for production optimization
 
 ## Contributing
 
@@ -367,6 +262,7 @@ python -m flake8 app/
 6. Commit your changes (`git commit -m 'Add amazing feature'`)
 7. Push to the branch (`git push origin feature/amazing-feature`)
 8. Open a Pull Request
+9. Wait for review (could be awhile. this is a hobby project)
 
 ## License
 
@@ -374,8 +270,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
+Originally inspired by the `My Practice Assistant` on justinguitar.com 
+
 ### Open Source Projects
-This project wouldn't be possible without these amazing open source libraries:
+This project would not have been possible without these open source libraries:
 
 **Backend:**
 - [Flask](https://flask.palletsprojects.com/) - Web framework
@@ -389,19 +287,19 @@ This project wouldn't be possible without these amazing open source libraries:
 - [SVGuitar](https://github.com/omnibrain/svguitar) by [@omnibrain](https://github.com/omnibrain) - Guitar chord diagram rendering
 
 **Guitar Data:**
-- [SVGuitar-ChordCollection](https://github.com/TormodKv/SVGuitar-ChordCollection) by [@TormodKv](https://github.com/TormodKv) - Comprehensive chord database
+- [SVGuitar-ChordCollection](https://github.com/TormodKv/SVGuitar-ChordCollection) by [@TormodKv](https://github.com/TormodKv) - Monsterous chord database
 
 **AI Integration:**
-- [Anthropic Claude](https://www.anthropic.com/) - AI-powered chord chart analysis and generation
+- [Anthropic Claude](https://www.anthropic.com/) - Claude Sonnet and Opus are working together like little digital guitar elves, building autocreated chord charts via the Anthropic API.
 
 ### Development Tools
 - [Claude Code](https://claude.ai/code) - AI pair programming assistant
-- [PostHog](https://posthog.com/) - Product analytics and feature flags
+- [PostHog](https://posthog.com/) - for product engineers
 
-Special thanks to the entire open source community for building the tools and libraries that make projects like this possible! 🎸
+Thanks to the entire open source community for building the tools and libraries that make projects like this possible. 🤘 
 
 ---
 
-**Happy practicing!** 🎵
+**Don't just practice it until you get it right. Practice it until you can't get it wrong.** --Source unknown 
 
-*If you find this helpful, please consider starring the repository and sharing it with other guitar players.*# guitar-practice-routine-app_postgresql
+*If you think this doesn't suck, please consider clicking the starry thingy, share it with other players, yada yada, blah blah blah* #guitar-practice-routine-app_postgresql

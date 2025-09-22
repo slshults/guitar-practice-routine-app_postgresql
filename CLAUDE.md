@@ -615,6 +615,102 @@ IMPORTANT:
 
 - Contextual reminder: In guitar we count strings in order from high pitch to low, so the string on the right side of our charts is string one. Likewise with frets, so fret one is at the top, and when we go "up" a fret, that means the next fret downward on the chart
 
+## Cross-Platform Development Patterns
+
+### WSL Detection and Path Handling
+**Critical Pattern**: Detect WSL environment for proper Windows path handling in Linux subsystem.
+
+```python
+# Detect WSL environment
+def is_wsl():
+    try:
+        with open('/proc/version', 'r') as f:
+            return 'microsoft' in f.read().lower()
+    except FileNotFoundError:
+        return False
+
+# Platform-specific folder opening
+if system == 'windows' or is_wsl:
+    windows_path = folder_path.replace('/', '\\')
+    try:
+        subprocess.run(['explorer.exe', windows_path], check=True)
+    except subprocess.CalledProcessError:
+        pass  # explorer.exe often returns non-zero even when successful
+```
+
+### Cross-Platform Feature Detection
+Use platform detection to conditionally show/hide features:
+
+```javascript
+// Frontend platform detection
+function supportsFolderOpening() {
+    return !isMobile();
+}
+
+function isMobile() {
+    const userAgent = navigator.userAgent.toLowerCase();
+    return /android|iphone|ipad|ipod/.test(userAgent);
+}
+
+// Conditional rendering
+{supportsFolderOpening() && (
+    <FolderOpeningFeature />
+)}
+```
+
+## Light Mode Implementation Pattern
+
+### Comprehensive CSS Override Strategy
+**Critical Pattern**: Use specific selectors with `!important` flags to override Tailwind defaults.
+
+```css
+/* CSS Variables for light mode */
+.light-mode {
+  --background: 0 0% 100%;
+  --foreground: 222.2 47.4% 11.2%;
+  /* ... other variables */
+}
+
+/* Body-specific overrides */
+body.light-mode {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Component-specific overrides */
+.light-mode .bg-gray-700 { background-color: #f3f4f6 !important; }
+.light-mode .text-white { color: #000000 !important; }
+
+/* SVG/Chord Chart specific overrides */
+.light-mode svg { background: #ffffff !important; }
+.light-mode svg path, .light-mode svg line { stroke: #000000 !important; }
+.light-mode svg circle { fill: #000000 !important; }
+.light-mode svg text { fill: #000000 !important; }
+```
+
+### JavaScript Theme Toggle Pattern
+```javascript
+function toggleTheme() {
+  const isCurrentlyLight = document.body.classList.contains('light-mode');
+
+  if (isCurrentlyLight) {
+    document.body.classList.remove('light-mode');
+    localStorage.setItem('lightMode', 'false');
+  } else {
+    document.body.classList.add('light-mode');
+    localStorage.setItem('lightMode', 'true');
+  }
+
+  updateToggleDisplay(!isCurrentlyLight);
+}
+```
+
+**Key Points**:
+- Use `localStorage` for theme persistence
+- Apply theme class to `<body>` element for global scope
+- Include specific overrides for SVG elements (chord charts)
+- Use `!important` flags to ensure overrides work against Tailwind utilities
+
 ## UI/UX Development Patterns
 
 ### Responsive Button Pairs
