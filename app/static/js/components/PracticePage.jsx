@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef, useMemo, memo } from 'react';
 import { trackPracticeEvent, trackActiveRoutine, trackChordChartEvent, trackSongbookLinkClick } from '../utils/analytics';
+import { supportsFolderOpening } from '../utils/platform';
 
 // Simple debounce function
 const debounce = (func, wait) => {
@@ -3751,16 +3752,16 @@ export const PracticePage = () => {
                     {/* Tuning and Songbook section */}
                     <div className="mt-4">
                       <div className="flex items-center justify-between">
-                        {/* Songbook folder link */}
-                        {itemDetails?.['F'] && (
-                          <button 
+                        {/* Songbook folder link - only show on desktop platforms */}
+                        {itemDetails?.['F'] && supportsFolderOpening() && (
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              
+
                               // Track songbook link click
                               const itemName = itemDetails?.['C'] || `Item ${routineItem['A']}`;
                               trackSongbookLinkClick(itemName, itemDetails['F']);
-                              
+
                               fetch('/api/open-folder', {
                                 method: 'POST',
                                 headers: {

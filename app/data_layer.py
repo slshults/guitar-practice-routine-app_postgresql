@@ -48,17 +48,21 @@ class DataLayer:
             logging.error("Sheets mode requested but not available, falling back to postgres")
             self.mode = 'postgres'
     
-    def _get_db_id_from_item_id(self, item_id: int) -> Optional[int]:
+    def _get_db_id_from_item_id(self, item_id) -> Optional[int]:
         """Convert ItemID (Column B from sheets) to database primary key (id column)."""
         if self.mode != 'postgres':
             return item_id  # In sheets mode, just pass through
-        
+
         try:
             from sqlalchemy import text
+            # Ensure item_id is always treated as string since that's how it's stored in DB
+            item_id_str = str(item_id)
             with DatabaseTransaction() as db:
-                result = db.execute(text('SELECT id FROM items WHERE item_id = :item_id'), {'item_id': str(item_id)}).fetchone()
+                result = db.execute(text('SELECT id FROM items WHERE item_id = :item_id'), {'item_id': item_id_str}).fetchone()
                 if result:
+                    logging.debug(f"Found database ID {result[0]} for ItemID '{item_id_str}'")
                     return result[0]  # Return database primary key
+                logging.warning(f"No database record found for ItemID '{item_id_str}'")
                 return None
         except Exception as e:
             logging.error(f"Error converting item_id {item_id} to db_id: {e}")

@@ -1,15 +1,44 @@
 // PostHog Analytics Utility
 // Centralized event tracking for the Guitar Practice Routine App
 
+// Track page visit start times for engagement metrics
+let pageStartTimes = {};
+
 /**
- * Track page visits
+ * Track page visits for SPA navigation
  * @param {string} pageName - Name of the page visited
  * @param {Object} additionalProperties - Additional properties to track
  */
 export const trackPageVisit = (pageName, additionalProperties = {}) => {
   if (typeof window !== 'undefined' && window.posthog) {
-    window.posthog.capture('Visited Page', {
+    // Track time spent on previous page
+    const previousPage = additionalProperties.previous_page;
+    if (previousPage && pageStartTimes[previousPage]) {
+      const timeSpent = Date.now() - pageStartTimes[previousPage];
+      window.posthog.capture('Page Time Spent', {
+        page_name: previousPage,
+        time_spent_ms: timeSpent,
+        time_spent_seconds: Math.round(timeSpent / 1000),
+        next_page: pageName
+      });
+    }
+
+    // Record start time for current page
+    pageStartTimes[pageName] = Date.now();
+
+    // Manual SPA pageview tracking using proper $pageview event
+    window.posthog.capture('$pageview', {
+      $current_url: `${window.location.origin}${window.location.pathname}#${pageName}`,
+      $host: window.location.host,
+      $pathname: window.location.pathname,
+      $search: window.location.search,
+      title: `Guitar Practice - ${pageName}`,
       page_name: pageName,
+      spa_navigation: true,
+      viewport_width: window.innerWidth,
+      viewport_height: window.innerHeight,
+      screen_width: window.screen.width,
+      screen_height: window.screen.height,
       ...additionalProperties
     });
   }

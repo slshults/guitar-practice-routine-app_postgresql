@@ -15,6 +15,8 @@
             api_host: 'https://us.i.posthog.com',
             defaults: '2025-05-24',
             person_profiles: 'identified_only', // or 'always' to create profiles for anonymous users as well
+            capture_pageview: false, // Disable automatic pageview capture for SPA
+            capture_pageleave: true // Keep pageleave tracking enabled
         })
     </script>
     {% endif %}

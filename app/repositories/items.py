@@ -38,7 +38,17 @@ class ItemRepository(BaseRepository):
     
     def update_from_sheets_format(self, item_id: int, sheets_data: Dict[str, Any]) -> Optional[Item]:
         """Update item using Google Sheets format data."""
+        # Convert from sheets format but exclude fields that shouldn't be updated
         item_data = self._from_sheets_format(sheets_data)
+
+        # Remove item_id to prevent overwriting the unique identifier
+        # This matches the sheets version behavior which excludes Column A (ID) and Column G (order) from updates
+        item_data.pop('item_id', None)
+
+        # Only update order if explicitly provided and different
+        if 'G' not in sheets_data:
+            item_data.pop('order', None)
+
         return self.update(item_id, **item_data)
     
     def update_order(self, items: List[Dict[str, Any]]) -> bool:

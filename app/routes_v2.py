@@ -51,9 +51,15 @@ def item(item_id):
     elif request.method == 'PUT':
         if not request.is_json:
             return jsonify({"error": "Request must be JSON"}), 400
-            
+
+        app.logger.info(f"Attempting to update item with ID: {item_id}, data: {request.json}")
         updated_item = data_layer.update_item(item_id, request.json)
-        return jsonify(updated_item) if updated_item else ('', 404)
+        if updated_item:
+            app.logger.info(f"Successfully updated item {item_id}")
+            return jsonify(updated_item)
+        else:
+            app.logger.warning(f"Failed to update item {item_id} - item not found or update failed")
+            return jsonify({"error": f"Item {item_id} not found or update failed"}), 404
         
     elif request.method == 'DELETE':
         success = data_layer.delete_item(item_id)
@@ -1058,7 +1064,7 @@ def search_common_chords():
 
 @app.route('/api/open-folder', methods=['POST'])
 def open_folder():
-    """Open a local folder in Windows Explorer (WSL-compatible)"""
+    """Open a local folder in the platform-appropriate file manager"""
     try:
         folder_path = request.json.get('path')
         if not folder_path:
@@ -1066,17 +1072,41 @@ def open_folder():
 
         app.logger.debug(f"Opening folder: {folder_path}")
 
-        # Keep Windows path format but ensure proper escaping
-        windows_path = folder_path.replace('/', '\\')
-        
-        # In WSL, we'll use explorer.exe to open Windows File Explorer
+        # Detect platform and use appropriate command (like sheets version)
+        import platform
+        import os
+        system = platform.system().lower()
+
         try:
-            # Use the Windows path directly with explorer.exe
-            subprocess.run(['explorer.exe', windows_path], check=True)
-            return jsonify({'success': True})
+            # Check if we're in WSL (Windows Subsystem for Linux)
+            is_wsl = os.path.exists('/proc/version') and 'microsoft' in open('/proc/version').read().lower()
+
+            if system == 'windows' or is_wsl:
+                # Windows (including WSL) - use explorer.exe like sheets version
+                windows_path = folder_path.replace('/', '\\')
+                try:
+                    subprocess.run(['explorer.exe', windows_path], check=True)
+                except subprocess.CalledProcessError:
+                    # explorer.exe often returns non-zero exit status even when successful
+                    # If it fails, it usually means the path doesn't exist, but folder still might open
+                    pass  # Consider it successful since explorer behavior is inconsistent
+            elif system == 'darwin':
+                # macOS
+                subprocess.run(['open', folder_path], check=True)
+            elif system == 'linux':
+                # Linux with GUI (X11/Wayland)
+                subprocess.run(['xdg-open', folder_path], check=True)
+            else:
+                return jsonify({'error': f'Unsupported platform: {system}'}), 400
+
+            return jsonify({'success': True, 'platform': system})
+
         except subprocess.CalledProcessError as e:
-            app.logger.error(f"Failed to open folder: {str(e)}")
+            app.logger.error(f"Failed to open folder on {system}: {str(e)}")
             return jsonify({'error': f'Failed to open folder: {str(e)}'}), 500
+        except FileNotFoundError as e:
+            app.logger.error(f"File manager not found on {system}: {str(e)}")
+            return jsonify({'error': f'File manager not available on {system}'}), 500
 
     except Exception as e:
         app.logger.error(f"Error in open_folder: {str(e)}")

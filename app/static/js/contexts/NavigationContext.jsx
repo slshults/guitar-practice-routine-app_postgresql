@@ -14,15 +14,30 @@ export const NavigationProvider = ({ children }) => {
 
   const [activePage, setActivePage] = useState(getInitialPage);
 
-  // Track initial page load
+  // Track initial page load with proper SPA pageview
   useEffect(() => {
-    trackPageVisit(activePage);
+    // Wait a bit to ensure PostHog is fully loaded
+    const timeoutId = setTimeout(() => {
+      trackPageVisit(activePage, {
+        initial_page_load: true,
+        referrer: document.referrer
+      });
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   // Enhanced setActivePage that includes analytics tracking and URL sync
   const setActivePageWithTracking = (pageName, updateHistory = true) => {
+    const previousPage = activePage;
     setActivePage(pageName);
-    trackPageVisit(pageName);
+
+    // Track navigation with previous page context
+    trackPageVisit(pageName, {
+      previous_page: previousPage,
+      navigation_type: updateHistory ? 'user_action' : 'browser_navigation',
+      timestamp: new Date().toISOString()
+    });
 
     // Update URL hash to reflect current page
     if (updateHistory) {

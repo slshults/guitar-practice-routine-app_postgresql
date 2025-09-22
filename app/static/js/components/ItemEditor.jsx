@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { trackItemOperation, trackContentUpdate } from '../utils/analytics';
+import { supportsFolderOpening } from '../utils/platform';
 import {
   Dialog,
   DialogContent,
@@ -185,16 +186,19 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="songbook">Songbook Folder</Label>
-            <Input
-              id="songbook"
-              value={formData['F']}
-              onChange={(e) => handleFormChange('F', e.target.value)}
-              placeholder="D:\Users\Steven\Documents\Guitar\Songbook\SongName"
-              className="bg-gray-900 font-mono"
-            />
-          </div>
+          {/* Songbook folder field - only show on desktop platforms */}
+          {supportsFolderOpening() && (
+            <div className="space-y-2">
+              <Label htmlFor="songbook">Songbook Folder</Label>
+              <Input
+                id="songbook"
+                value={formData['F']}
+                onChange={(e) => handleFormChange('F', e.target.value)}
+                placeholder="D:\Users\Steven\Documents\Guitar\Songbook\SongName"
+                className="bg-gray-900 font-mono"
+              />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="tuning">Tuning</Label>
@@ -248,6 +252,11 @@ export const BulkSongbookUpdate = ({ onComplete }) => {
   const [paths, setPaths] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [result, setResult] = useState(null);
+
+  // Don't render on mobile platforms
+  if (!supportsFolderOpening()) {
+    return null;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
