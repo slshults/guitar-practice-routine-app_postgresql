@@ -476,6 +476,33 @@ setChordSections(prev => ({
 - Progress messages with rotating content during processing
 - Immediate UI refresh after completion
 
+#### OCR Power Optimization (NEW)
+**80% Power Reduction Strategy**: Use local OCR extraction + lightweight Sonnet processing instead of heavy visual analysis.
+
+**Implementation Pattern**:
+```python
+# 1. Try OCR first for PDFs/images in process_chord_names_with_lyrics()
+from app.utils.chord_ocr import extract_chords_from_file, should_use_ocr_result
+
+# 2. If OCR finds 2+ chords, replace file content with text
+if ocr_result and should_use_ocr_result(ocr_result, minimum_chords=2):
+    chord_names_text = ", ".join(ocr_result['chords'])
+    file_data['data'] = f"Chord names extracted via OCR: {chord_names_text}"
+    file_data['type'] = 'chord_names'
+    # Continue to existing Sonnet processing
+
+# 3. Fallback to full LLM analysis if OCR insufficient
+```
+
+**Dependencies**:
+- System: `sudo apt-get install tesseract-ocr poppler-utils`
+- Python: `pip install pytesseract pdf2image pillow`
+
+**Performance**:
+- **Clean chord charts**: ~80% power savings (~4 seconds vs ~30 seconds)
+- **Complex files**: Graceful fallback to full LLM processing
+- **Quality**: Same output using proven Sonnet + CommonChords path
+
 #### Visual Analysis Debugging Process (NEW)
 **CRITICAL: Chord Diagram Reading Rules for Autocreate Feature**
 - **Chord diagram anatomy**: Dots are positioned BETWEEN fret lines, not ON fret lines

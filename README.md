@@ -32,16 +32,17 @@ This version uses PostgreSQL as the database backend.
 ### Optional auto-creation of chord charts with help from Claude AI
 - **Autocreate chord charts** from lyrics sheets with chord names, existing chord charts, or YouTube lesson URLs
 - **Three processing paths**: Visual chord diagrams, chord names above lyrics, and tablature notation
-- **Smart model selection** - optimized for accuracy and cost efficiency
+- **Smart model selection** - optimized for accuracy and cost efficiency. local OCR is used to pull info from lyrics sheets with chord names and send it ot Sonnet 4 to pull the chords from a the DB. chord charts visually analyzed by Opus 4.1 who sends the results to Sonnet 4 for chord chart creation 
 - **Optional feature** - requires Anthropic API key
 
-### Track your practice time in-depth
-- **PostHog analytics built-in** - optional practice history tracking via PostHog. Works with the free level, project API key required. Track your stuff however you like.
+### Track your practice time, in-depth
+- **PostHog analytics built-in** - optional practice history tracking via PostHog. Works with the free level, project API key required. 
 
 # Getting Started
 
 ### Prerequisites
 
+- Comfort using a CLI (e.g. bash shell)
 - **PostgreSQL 12+** installed and running
 - **Python 3.8+**
 - **Node.js 16+** and npm
@@ -290,7 +291,7 @@ This project would not have been possible without these open source libraries:
 - [SVGuitar-ChordCollection](https://github.com/TormodKv/SVGuitar-ChordCollection) by [@TormodKv](https://github.com/TormodKv) - Monsterous chord database
 
 **AI Integration:**
-- [Anthropic Claude](https://www.anthropic.com/) - Claude Sonnet and Opus are working together like little digital guitar elves, building autocreated chord charts via the Anthropic API.
+- [Anthropic Claude](https://www.anthropic.com/) - Claude Sonnet and Opus are working together like little digital guitar elves, building autocreated chord charts via the Anthropic API. (Simple OCR is handled locally to reduce power consumption)
 
 ### Development Tools
 - [Claude Code](https://claude.ai/code) - AI pair programming assistant

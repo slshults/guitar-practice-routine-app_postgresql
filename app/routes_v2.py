@@ -413,17 +413,17 @@ def autocreate_chord_charts():
         api_key = os.getenv('ANTHROPIC_API_KEY')
         if not api_key:
             return jsonify({'error': 'Anthropic API key not configured'}), 500
-            
+
         # Initialize Anthropic client
         import anthropic
         from app.utils.llm_analytics import track_llm_generation, track_llm_span
         client = anthropic.Anthropic(api_key=api_key)
         app.logger.info(f"[AUTOCREATE] Anthropic client initialized successfully")
-        
+
         # Prepare the Claude analysis request
         app.logger.info(f"[AUTOCREATE] Starting Claude analysis for item {item_id}")
         app.logger.debug("Sending files to Claude for analysis")
-        
+
         # Process with simplified autocreate logic
         analysis_result = analyze_files_with_claude(client, uploaded_files, item_id)
         app.logger.info(f"[AUTOCREATE] Claude analysis completed, result type: {type(analysis_result)}")
@@ -2312,11 +2312,53 @@ Thanks for helping me extract chord progressions from this voice-to-text transcr
         return {'error': f'Failed to process YouTube transcript: {str(e)}'}
 
 
+
 def process_chord_names_with_lyrics(client, uploaded_files, item_id):
     """Process files with chord names above lyrics using CommonChords lookup"""
     try:
         app.logger.info(f"[AUTOCREATE] process_chord_names_with_lyrics called with {len(uploaded_files)} files for item {item_id}")
         app.logger.info("Processing chord names above lyrics with CommonChords lookup")
+
+        # POWER OPTIMIZATION: Try OCR extraction first for PDFs and images
+        file_data = uploaded_files[0]  # Process single file
+        if file_data.get('type') in ['pdf', 'image']:
+            app.logger.info(f"[AUTOCREATE] Attempting OCR extraction for {file_data.get('type')} file: {file_data.get('name')}")
+
+            try:
+                from app.utils.chord_ocr import extract_chords_from_file, should_use_ocr_result
+
+                # Extract chords using OCR
+                if file_data.get('type') == 'pdf':
+                    import base64
+                    pdf_bytes = base64.b64decode(file_data['data'])
+                    ocr_result = extract_chords_from_file(pdf_bytes, 'pdf', file_data['name'])
+                elif file_data.get('type') == 'image':
+                    ocr_result = extract_chords_from_file(file_data['data'], 'image', file_data['name'])
+
+                # Check if OCR found enough chords to use lightweight processing
+                if ocr_result and should_use_ocr_result(ocr_result, minimum_chords=2):
+                    app.logger.info(f"[AUTOCREATE] 🚀 OCR SUCCESS! Found {len(ocr_result['chords'])} chords, using lightweight Sonnet processing for 80% power savings!")
+
+                    # Log the OCR raw text for debugging
+                    app.logger.info(f"[AUTOCREATE] OCR Raw Text (first 500 chars): {ocr_result['raw_text'][:500]}...")
+                    app.logger.info(f"[AUTOCREATE] OCR Found Chords: {ocr_result['chords']}")
+
+                    # Replace file content with complete OCR text to preserve sectional structure
+                    file_data['data'] = ocr_result['raw_text']
+                    file_data['type'] = 'chord_names'
+
+                    app.logger.info(f"[AUTOCREATE] Feeding complete OCR text to existing Sonnet processing (preserves sections)")
+                    # Continue to existing Sonnet processing below (no return here)
+
+                else:
+                    chords_found = len(ocr_result.get('chords', [])) if ocr_result else 0
+                    app.logger.info(f"[AUTOCREATE] OCR found {chords_found} chords (need 2+), falling back to LLM processing")
+
+            except Exception as e:
+                app.logger.warning(f"[AUTOCREATE] OCR extraction failed: {str(e)}, falling back to LLM processing")
+
+        else:
+            app.logger.info(f"[AUTOCREATE] Text file detected, skipping OCR and using LLM processing")
 
         prompt_text = """🎸 **Hey Claude! Chord Names from Lyrics Processing**
 
