@@ -484,15 +484,16 @@ setChordSections(prev => ({
 # 1. Try OCR first for PDFs/images in process_chord_names_with_lyrics()
 from app.utils.chord_ocr import extract_chords_from_file, should_use_ocr_result
 
-# 2. If OCR finds 2+ chords, replace file content with text
+# 2. If OCR finds 2+ chords, pass complete raw text to preserve sectional structure
 if ocr_result and should_use_ocr_result(ocr_result, minimum_chords=2):
-    chord_names_text = ", ".join(ocr_result['chords'])
-    file_data['data'] = f"Chord names extracted via OCR: {chord_names_text}"
+    file_data['data'] = ocr_result['raw_text']  # CRITICAL: Use raw_text, not chord names
     file_data['type'] = 'chord_names'
-    # Continue to existing Sonnet processing
+    # Continue to existing Sonnet processing with full sectional context
 
 # 3. Fallback to full LLM analysis if OCR insufficient
 ```
+
+**Critical Fix Applied**: Previously sent only extracted chord names, losing sectional structure (Verse, Chorus, Bridge). Now sends complete OCR raw text to preserve song organization.
 
 **Dependencies**:
 - System: `sudo apt-get install tesseract-ocr poppler-utils`

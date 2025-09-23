@@ -271,7 +271,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Acknowledgments
 
-Originally inspired by the `My Practice Assistant` on justinguitar.com 
+Originally inspired by the ['My Practice Assistant' on justinguitar.com](https://www.justinguitar.com/guitar-lessons/using-my-practice-assistant-b1-117) 
 
 ### Open Source Projects
 This project would not have been possible without these open source libraries:

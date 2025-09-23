@@ -173,6 +173,7 @@ def _calculate_confidence(chords, chord_counts, raw_text):
 def should_use_ocr_result(ocr_result, minimum_chords=2):
     """
     Determine if OCR result is good enough to skip LLM processing.
+    Now includes text quality checks to catch gibberish output.
 
     Args:
         ocr_result: Result from extract_chords_from_file()
@@ -186,24 +187,116 @@ def should_use_ocr_result(ocr_result, minimum_chords=2):
 
     chords = ocr_result.get('chords', [])
     confidence = ocr_result.get('confidence', 'low')
+    raw_text = ocr_result.get('raw_text', '')
 
     # Must have at least minimum_chords unique chords
     if len(chords) < minimum_chords:
         logger.info(f"[CHORD_OCR] Only found {len(chords)} chords, need {minimum_chords}. Falling back to LLM.")
         return False
 
-    # Accept medium or high confidence results
+    # NEW: Text quality checks to catch gibberish
+    text_quality_score = _assess_text_quality(raw_text)
+    if text_quality_score < 0.3:  # 30% quality threshold
+        logger.info(f"[CHORD_OCR] Poor text quality (score: {text_quality_score:.2f}). Text appears garbled, falling back to LLM.")
+        return False
+
+    # Accept medium or high confidence results (with quality check passed)
     if confidence in ['medium', 'high']:
-        logger.info(f"[CHORD_OCR] OCR success! Found {len(chords)} chords with {confidence} confidence.")
+        logger.info(f"[CHORD_OCR] OCR success! Found {len(chords)} chords with {confidence} confidence and good text quality.")
         return True
 
-    # Low confidence with many chords might still be good
+    # Low confidence with many chords might still be good (if quality is decent)
     if confidence == 'low' and len(chords) >= 4:
-        logger.info(f"[CHORD_OCR] Low confidence but {len(chords)} chords found. Using OCR result.")
+        logger.info(f"[CHORD_OCR] Low confidence but {len(chords)} chords found with acceptable text quality. Using OCR result.")
         return True
 
     logger.info(f"[CHORD_OCR] {confidence} confidence with {len(chords)} chords. Falling back to LLM.")
     return False
+
+def _assess_text_quality(text):
+    """
+    Assess the quality of OCR-extracted text to detect gibberish.
+    Returns a score from 0.0 (pure gibberish) to 1.0 (perfect text).
+
+    Args:
+        text: Raw OCR text to assess
+
+    Returns:
+        float: Quality score between 0.0 and 1.0
+    """
+    if not text or len(text.strip()) < 10:
+        return 0.0
+
+    # Clean text for analysis
+    cleaned_text = text.strip()
+    total_chars = len(cleaned_text)
+
+    # Count readable elements
+    readable_chars = 0
+    word_count = 0
+    single_char_fragments = 0
+
+    # Split into words and analyze
+    words = re.split(r'\s+', cleaned_text)
+    for word in words:
+        # Remove punctuation for analysis
+        clean_word = re.sub(r'[^\w]', '', word)
+        if len(clean_word) == 0:
+            continue
+
+        if len(clean_word) == 1:
+            single_char_fragments += 1
+        elif len(clean_word) >= 2:
+            word_count += 1
+            readable_chars += len(clean_word)
+
+    # Calculate quality metrics
+    if total_chars == 0:
+        return 0.0
+
+    # Readable character ratio (excluding spaces/punctuation)
+    readable_ratio = readable_chars / max(total_chars, 1)
+
+    # Word formation ratio (multi-char words vs single chars)
+    total_fragments = word_count + single_char_fragments
+    if total_fragments == 0:
+        word_formation_ratio = 0.0
+    else:
+        word_formation_ratio = word_count / total_fragments
+
+    # Length factor (very short text is suspicious)
+    length_factor = min(1.0, len(cleaned_text) / 50)  # Full credit at 50+ chars
+
+    # Check for common gibberish patterns
+    gibberish_penalty = 0.0
+    gibberish_patterns = [
+        r'[a-zA-Z]{1}\s+[a-zA-Z]{1}\s+[a-zA-Z]{1}',  # Single chars: "o D t"
+        r'^[^a-zA-Z]*[a-zA-Z]{1,2}[^a-zA-Z]*$',       # Very short isolated chars
+        r'[a-zA-Z][^a-zA-Z\s]{3,}[a-zA-Z]',          # Chars mixed with symbols
+    ]
+
+    for pattern in gibberish_patterns:
+        if re.search(pattern, cleaned_text):
+            gibberish_penalty += 0.2
+
+    # Calculate final score
+    quality_score = (
+        readable_ratio * 0.4 +           # 40% weight on readable chars
+        word_formation_ratio * 0.4 +     # 40% weight on word formation
+        length_factor * 0.2              # 20% weight on length
+    ) - gibberish_penalty
+
+    # Clamp to 0.0-1.0 range
+    quality_score = max(0.0, min(1.0, quality_score))
+
+    logger.debug(f"[CHORD_OCR] Text quality assessment: "
+                f"readable_ratio={readable_ratio:.2f}, "
+                f"word_formation_ratio={word_formation_ratio:.2f}, "
+                f"length_factor={length_factor:.2f}, "
+                f"gibberish_penalty={gibberish_penalty:.2f}, "
+                f"final_score={quality_score:.2f}")
+
+    return quality_score
 
 def test_ocr_extraction():
     """Test function for development - can be removed in production"""

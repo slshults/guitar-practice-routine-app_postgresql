@@ -2348,6 +2348,15 @@ def process_chord_names_with_lyrics(client, uploaded_files, item_id):
                     file_data['type'] = 'chord_names'
 
                     app.logger.info(f"[AUTOCREATE] Feeding complete OCR text to existing Sonnet processing (preserves sections)")
+
+                    # NEW: Assess OCR trustworthiness using Sonnet 4 intelligence
+                    ocr_assessment = assess_ocr_trustworthiness(client, ocr_result['raw_text'], file_data['name'])
+                    if not ocr_assessment['trustworthy']:
+                        app.logger.info(f"[AUTOCREATE] OCR contains gibberish ({ocr_assessment['reason']}), falling back to visual analysis")
+                        # Fall back to Opus 4.1 visual analysis for complex layouts
+                        return process_chord_charts_directly(client, uploaded_files, item_id)
+
+                    app.logger.info(f"[AUTOCREATE] OCR text assessed as trustworthy, proceeding with Sonnet processing")
                     # Continue to existing Sonnet processing below (no return here)
 
                 else:
@@ -2904,3 +2913,59 @@ def create_chord_charts_from_data(chord_data, item_id):
     except Exception as e:
         app.logger.error(f"Error creating chord charts: {str(e)}")
         raise
+
+def assess_ocr_trustworthiness(client, ocr_text, filename):
+    """
+    Use Sonnet 4 to intelligently assess if OCR text contains too much gibberish.
+    Returns dict with 'trustworthy' bool and 'reason' string.
+    """
+    try:
+        app.logger.info(f"[AUTOCREATE] Assessing OCR trustworthiness for {filename}")
+
+        assessment_prompt = f"""**OCR Trustworthiness Assessment**
+
+I need you to assess whether this OCR-extracted text is trustworthy for chord chart processing, or if it contains too much gibberish to trust.
+
+**Your Task:**
+Look for OCR artifacts and gibberish strings that indicate corrupted data, such as:
+- Random isolated characters mixed with symbols (like "oD t=" or "G =¥i")
+- Fragmented text with unusual symbol combinations
+- Text that looks like OCR recognition errors rather than real content
+
+**OCR Text to Assess:**
+```
+{ocr_text[:1000]}{'...' if len(ocr_text) > 1000 else ''}
+```
+
+**Response Format:**
+Respond with ONLY one of these two options:
+
+TRUSTWORTHY - if the text appears clean and usable despite minor OCR imperfections
+CORRUPTED - if there are significant gibberish patterns that indicate unreliable data
+
+**Important:** Be conservative - if you see clear gibberish artifacts, mark as CORRUPTED even if some parts look good."""
+
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=100,  # Short response needed
+            temperature=0.1,
+            messages=[{"role": "user", "content": assessment_prompt}]
+        )
+
+        assessment_result = response.content[0].text.strip().upper()
+
+        if "TRUSTWORTHY" in assessment_result:
+            app.logger.info(f"[AUTOCREATE] OCR assessment: TRUSTWORTHY")
+            return {'trustworthy': True, 'reason': 'Sonnet assessed OCR text as clean and usable'}
+        elif "CORRUPTED" in assessment_result:
+            app.logger.info(f"[AUTOCREATE] OCR assessment: CORRUPTED")
+            return {'trustworthy': False, 'reason': 'Sonnet detected gibberish patterns in OCR text'}
+        else:
+            # Default to untrusted if unclear response
+            app.logger.warning(f"[AUTOCREATE] OCR assessment unclear: {assessment_result}, defaulting to untrusted")
+            return {'trustworthy': False, 'reason': 'OCR assessment response unclear, being conservative'}
+
+    except Exception as e:
+        app.logger.error(f"[AUTOCREATE] OCR trustworthiness assessment failed: {str(e)}")
+        # Default to untrusted on error - better safe than sorry
+        return {'trustworthy': False, 'reason': f'Assessment error: {str(e)}'}
