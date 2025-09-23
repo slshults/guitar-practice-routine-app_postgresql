@@ -1,5 +1,5 @@
 // app/static/js/main.jsx
-import '../css/main.css'
+import '../css/input.css'
 import React, { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { NavigationProvider, useNavigation } from '@contexts/NavigationContext';

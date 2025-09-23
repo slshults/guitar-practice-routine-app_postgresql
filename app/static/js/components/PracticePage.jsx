@@ -388,6 +388,7 @@ export const PracticePage = () => {
 
   // YouTube URL state for transcript-based chord creation
   const [youtubeUrls, setYoutubeUrls] = useState({});
+  const [manualChordInput, setManualChordInput] = useState({});
   const [showNoTranscriptModal, setShowNoTranscriptModal] = useState(false);
   const [noTranscriptData, setNoTranscriptData] = useState(null);
   const [manualTranscript, setManualTranscript] = useState('');
@@ -2463,8 +2464,9 @@ export const PracticePage = () => {
   const handleProcessFiles = async (itemId) => {
     const files = uploadedFiles[itemId] || [];
     const youtubeUrl = youtubeUrls[itemId]?.trim();
+    const manualChords = manualChordInput[itemId]?.trim();
 
-    console.log(`[AUTOCREATE] handleProcessFiles called for item ${itemId}, files:`, files.length, 'youtubeUrl:', youtubeUrl);
+    console.log(`[AUTOCREATE] handleProcessFiles called for item ${itemId}, files:`, files.length, 'youtubeUrl:', youtubeUrl, 'manualChords:', manualChords);
 
     // Handle YouTube URL if provided
     if (youtubeUrl) {
@@ -2472,13 +2474,228 @@ export const PracticePage = () => {
       return;
     }
 
+    // Handle manual chord input if provided
+    if (manualChords) {
+      await handleManualChordInput(itemId, manualChords);
+      return;
+    }
+
     // Handle files if provided
     if (files.length === 0) {
-      alert('Please add at least one file or YouTube URL before processing.');
+      alert('Please add at least one file, YouTube URL, or manual chord input before processing.');
       return;
     }
 
     await handleFileDrop(itemId, files);
+  };
+
+  const handleManualChordInput = async (itemId, chordInput) => {
+    console.log(`[AUTOCREATE] Processing manual chord input for item ${itemId}:`, chordInput);
+
+    setAutocreateProgress(prev => ({
+      ...prev,
+      [itemId]: 'processing'
+    }));
+
+    try {
+      // Parse the chord input and create chord charts directly
+      const lines = chordInput.split('\n').map(line => line.trim()).filter(line => line);
+      const sections = [];
+      let currentSection = { label: 'Default', chords: [] };
+
+      for (const line of lines) {
+        // Check if this line is a section name (no commas)
+        if (!line.includes(',') && !line.match(/^[A-G]/)) {
+          // This is a section name
+          if (currentSection.chords.length > 0) {
+            sections.push(currentSection);
+          }
+          currentSection = { label: line, chords: [] };
+        } else {
+          // This is a chord line - split by commas
+          const chords = line.split(',').map(chord => chord.trim()).filter(chord => chord);
+          currentSection.chords.push(...chords);
+        }
+      }
+
+      // Add the last section
+      if (currentSection.chords.length > 0) {
+        sections.push(currentSection);
+      }
+
+      // Create chord charts by looking up shapes from CommonChords
+      const chordChartsToCreate = [];
+      let order = 0;
+
+      for (const section of sections) {
+        for (const chordName of section.chords) {
+          try {
+            // Look up chord shape from CommonChords database
+            console.log(`[MANUAL] Looking up chord: ${chordName}`);
+            const searchResponse = await fetch(`/api/chord-charts/common/search?name=${encodeURIComponent(chordName)}`);
+            let chordData = {
+              fingers: [],
+              barres: [],
+              capo: 0,
+              tuning: "EADGBE",
+              numFrets: 5,
+              numStrings: 6,
+              startingFret: 1,
+              sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
+              sectionLabel: section.label,
+              sectionRepeatCount: ""
+            };
+
+            if (searchResponse.ok) {
+              const commonChords = await searchResponse.json();
+              console.log(`[MANUAL] Search result for ${chordName}:`, commonChords);
+              if (commonChords.length > 0) {
+                // Use the first match from CommonChords
+                const commonChord = commonChords[0];
+                console.log(`[MANUAL] Using chord data for ${chordName}:`, commonChord);
+                chordData = {
+                  ...chordData,
+                  fingers: commonChord.fingers || [],
+                  barres: commonChord.barres || [],
+                  capo: commonChord.capo || 0,
+                  tuning: commonChord.tuning || "EADGBE",
+                  numFrets: commonChord.numFrets || 5,
+                  numStrings: commonChord.numStrings || 6,
+                  startingFret: commonChord.startingFret || 1,
+                  openStrings: commonChord.openStrings || [],
+                  mutedStrings: commonChord.mutedStrings || []
+                };
+              } else {
+                console.log(`[MANUAL] No CommonChords found for ${chordName}`);
+              }
+            } else {
+              console.error(`[MANUAL] Search failed for ${chordName}:`, searchResponse.status, searchResponse.statusText);
+            }
+
+            chordChartsToCreate.push({
+              title: chordName,
+              sectionLabel: section.label,
+              sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
+              sectionRepeatCount: "",
+              order: order++,
+              chordData: chordData
+            });
+          } catch (error) {
+            console.error(`Error looking up chord ${chordName}:`, error);
+            // Fallback to empty chord if lookup fails
+            chordChartsToCreate.push({
+              title: chordName,
+              sectionLabel: section.label,
+              sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
+              sectionRepeatCount: "",
+              order: order++,
+              chordData: {
+                fingers: [],
+                barres: [],
+                capo: 0,
+                tuning: "EADGBE",
+                numFrets: 5,
+                numStrings: 6,
+                startingFret: 1,
+                sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
+                sectionLabel: section.label,
+                sectionRepeatCount: ""
+              }
+            });
+          }
+        }
+      }
+
+      if (chordChartsToCreate.length === 0) {
+        alert('No valid chord names found in the input.');
+        setAutocreateProgress(prev => {
+          const newState = { ...prev };
+          delete newState[itemId];
+          return newState;
+        });
+        return;
+      }
+
+      // Call the backend to create chord charts using existing batch endpoint
+      console.log(`[MANUAL] Creating ${chordChartsToCreate.length} chord charts for item ${itemId}`);
+      const batchData = chordChartsToCreate.map(chord => ({
+        title: chord.title,
+        sectionLabel: chord.sectionLabel,
+        sectionId: chord.sectionId,
+        sectionRepeatCount: chord.sectionRepeatCount,
+        order: chord.order,
+        chord_data: chord.chordData  // Use snake_case to match repository expectations
+      }));
+      console.log(`[MANUAL] Batch data:`, batchData);
+
+      const response = await fetch('/api/items/' + itemId + '/chord-charts/batch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(batchData)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create chord charts: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('[MANUAL] Chord charts created successfully:', result);
+
+      // Show success modal
+      const itemDetails = getItemDetails(itemId);
+      setAutocreateSuccessData({
+        itemName: itemDetails?.['C'] || `Item ${itemId}`,
+        chordCount: chordChartsToCreate.length,
+        contentType: 'manual_input',
+        uploadedFileNames: 'Manual chord entry',
+        isVisionAnalysis: false
+      });
+      setShowAutocreateSuccessModal(true);
+
+      // Force refresh chord charts
+      try {
+        const chartsResponse = await fetch(`/api/items/${itemId}/chord-charts`);
+        if (chartsResponse.ok) {
+          const charts = await chartsResponse.json();
+          setChordCharts(prev => ({
+            ...prev,
+            [itemId]: charts
+          }));
+
+          // Build sections from loaded chord charts
+          if (charts.length === 0) {
+            setChordSections(prev => ({
+              ...prev,
+              [itemId]: []
+            }));
+          } else {
+            const sections = buildSectionsFromCharts(charts);
+            setChordSections(prev => ({
+              ...prev,
+              [itemId]: sections
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error refreshing chord charts:', error);
+      }
+
+      // Clear the manual input
+      setManualChordInput(prev => ({ ...prev, [itemId]: '' }));
+
+    } catch (error) {
+      console.error('Error processing manual chord input:', error);
+      setApiError({ message: 'Failed to process manual chord input. Please try again.' });
+      setShowApiErrorModal(true);
+    } finally {
+      setAutocreateProgress(prev => {
+        const newState = { ...prev };
+        delete newState[itemId];
+        return newState;
+      });
+    }
   };
 
   const handleYouTubeUrl = async (itemId, youtubeUrl) => {
@@ -2593,7 +2810,16 @@ export const PracticePage = () => {
         });
       }
 
-      // For YouTube transcripts, don't show success modal - just complete silently
+      // Show success modal for YouTube transcripts
+      const itemDetails = getItemDetails(itemId);
+      setAutocreateSuccessData({
+        itemName: itemDetails?.['C'] || `Item ${itemId}`,
+        chordCount: result.chord_count || 0,
+        contentType: 'youtube_transcript',
+        uploadedFileNames: 'YouTube transcript',
+        isVisionAnalysis: false
+      });
+      setShowAutocreateSuccessModal(true);
 
       // Force refresh chord charts for this item (same as file upload)
       try {
@@ -3348,99 +3574,122 @@ export const PracticePage = () => {
                                       {zoneExpanded && (
                                         <div className="border border-green-600/30 rounded-lg p-4 bg-green-900/10">
                                           <div className="text-sm text-gray-400 mb-6">
-                                            <p>To autocreate chord charts for songs in standard tuning: Upload a file showing lyrics with chord names above the lyrics, or a PDF or image showing the chord names written out by song section.</p>
-                                            <br />
-                                            <p>To import chord charts (standard and alternate tunings): Upload a file showing your chord charts, and we'll rebuild them for you here.</p>
+                                            <p>• Upload lyrics with chord names to create charts</p>
+                                            <p>• Upload chord diagrams to import existing charts</p>
                                           </div>
                                           
                                           {!progress && (
                                             <>
-                                              {/* Single drop zone for all files */}
-                                              <div
-                                                className={`w-full p-6 border-2 border-dashed rounded-lg transition-colors cursor-pointer mb-6 ${
-                                                  isDragActive[itemReferenceId]
-                                                    ? 'border-blue-400 bg-blue-900/20'
-                                                    : 'border-blue-600 hover:border-blue-500 bg-blue-900/10'
-                                                }`}
-                                            onDragOver={(e) => {
-                                              e.preventDefault();
-                                              setIsDragActive(prev => {
-                                                // Only update state if it's actually changing
-                                                if (prev[itemReferenceId] !== true) {
-                                                  return { ...prev, [itemReferenceId]: true };
-                                                }
-                                                return prev;
-                                              });
-                                            }}
-                                            onDragLeave={(e) => {
-                                              e.preventDefault();
-                                              setIsDragActive(prev => {
-                                                // Only update state if it's actually changing
-                                                if (prev[itemReferenceId] !== false) {
-                                                  return { ...prev, [itemReferenceId]: false };
-                                                }
-                                                return prev;
-                                              });
-                                            }}
-                                            onDrop={(e) => {
-                                              e.preventDefault();
-                                              setIsDragActive(prev => ({ ...prev, [itemReferenceId]: false }));
-                                              handleSingleFileDrop(itemReferenceId, e.dataTransfer.files);
-                                            }}
-                                            onClick={() => {
-                                              const input = document.createElement('input');
-                                              input.type = 'file';
-                                              input.multiple = true;
-                                              input.accept = '.pdf,.png,.jpg,.jpeg';
-                                              input.onchange = (e) => handleSingleFileDrop(itemReferenceId, e.target.files);
-                                              input.click();
-                                            }}
-                                          >
-                                            <div className="text-center">
-                                              <Upload className={`h-16 w-16 mx-auto mb-2 ${
-                                                uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-400' : 'text-gray-400'
-                                              }`} />
-                                              <p className={`text-lg font-medium mb-2 ${
-                                                uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-300' : 'text-gray-300'
-                                              }`}>Drop files here or click to browse</p>
-                                              <p className="text-gray-400 text-sm mb-4">
-                                                PDFs, images (PNG, JPG) • 5mb max
-                                              </p>
-                                              {uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? (
-                                                <div>
-                                                  <p className="text-blue-400 text-sm font-medium mb-2">
-                                                    {uploadedFiles[itemReferenceId].length} file(s) selected:
-                                                  </p>
-                                                  <div className="text-xs text-gray-400 space-y-1">
-                                                    {uploadedFiles[itemReferenceId].map((file, index) => (
-                                                      <div key={index}>{file.name}</div>
-                                                    ))}
+                                              {/* Three-column layout for larger screens, stacked on mobile */}
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 items-start">
+
+                                                {/* Column 1: File Upload */}
+                                                <div className="flex flex-col">
+                                                  <div className="text-center mb-2">
+                                                    <p className="text-gray-400 text-sm font-medium">Upload Files</p>
+                                                  </div>
+                                                  <div
+                                                    className={`flex-1 p-4 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${
+                                                      isDragActive[itemReferenceId]
+                                                        ? 'border-blue-400 bg-blue-900/20'
+                                                        : 'border-blue-600 hover:border-blue-500 bg-blue-900/10'
+                                                    }`}
+                                                    onDragOver={(e) => {
+                                                      e.preventDefault();
+                                                      setIsDragActive(prev => {
+                                                        if (prev[itemReferenceId] !== true) {
+                                                          return { ...prev, [itemReferenceId]: true };
+                                                        }
+                                                        return prev;
+                                                      });
+                                                    }}
+                                                    onDragLeave={(e) => {
+                                                      e.preventDefault();
+                                                      setIsDragActive(prev => {
+                                                        if (prev[itemReferenceId] !== false) {
+                                                          return { ...prev, [itemReferenceId]: false };
+                                                        }
+                                                        return prev;
+                                                      });
+                                                    }}
+                                                    onDrop={(e) => {
+                                                      e.preventDefault();
+                                                      setIsDragActive(prev => ({ ...prev, [itemReferenceId]: false }));
+                                                      handleSingleFileDrop(itemReferenceId, e.dataTransfer.files);
+                                                    }}
+                                                    onClick={() => {
+                                                      const input = document.createElement('input');
+                                                      input.type = 'file';
+                                                      input.multiple = true;
+                                                      input.accept = '.pdf,.png,.jpg,.jpeg';
+                                                      input.onchange = (e) => handleSingleFileDrop(itemReferenceId, e.target.files);
+                                                      input.click();
+                                                    }}
+                                                  >
+                                                    <div className="text-center">
+                                                      <Upload className={`h-12 w-12 mx-auto mb-2 ${
+                                                        uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-400' : 'text-gray-400'
+                                                      }`} />
+                                                      <p className={`text-sm font-medium mb-2 ${
+                                                        uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-300' : 'text-gray-300'
+                                                      }`}>Drop files or click</p>
+                                                      <p className="text-gray-400 text-xs mb-2">
+                                                        PDFs, images • 5mb max
+                                                      </p>
+                                                      {uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? (
+                                                        <div>
+                                                          <p className="text-blue-400 text-xs font-medium mb-1">
+                                                            {uploadedFiles[itemReferenceId].length} file(s)
+                                                          </p>
+                                                        </div>
+                                                      ) : (
+                                                        <p className="text-gray-400 text-xs">
+                                                          Lyrics or chord charts
+                                                        </p>
+                                                      )}
+                                                    </div>
                                                   </div>
                                                 </div>
-                                              ) : (
-                                                <p className="text-gray-400 text-xs">
-                                                  Lyrics with chords (standard tuning only) • Chord charts
-                                                </p>
-                                              )}
-                                            </div>
-                                          </div>
 
-                                          {/* YouTube URL Field */}
-                                          <div className="mt-4 mb-4">
-                                            <div className="text-center mb-2">
-                                              <p className="text-gray-400 text-sm">Or paste a YouTube URL:</p>
-                                            </div>
-                                            <input
-                                              type="url"
-                                              placeholder="https://www.youtube.com/watch?v=..."
-                                              value={youtubeUrls[itemReferenceId] || ''}
-                                              onChange={(e) => setYoutubeUrls(prev => ({
-                                                ...prev,
-                                                [itemReferenceId]: e.target.value
-                                              }))}
-                                              className="w-full p-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-red-500 text-sm"
-                                            />
-                                          </div>
+                                                {/* Column 2: YouTube URL */}
+                                                <div className="flex flex-col">
+                                                  <div className="text-center mb-2">
+                                                    <p className="text-gray-400 text-sm font-medium">YouTube Guitar Lesson</p>
+                                                  </div>
+                                                  <div className="flex-1 flex flex-col justify-center">
+                                                    <input
+                                                      type="url"
+                                                      placeholder="YouTube guitar lesson URL (transcript required)"
+                                                      value={youtubeUrls[itemReferenceId] || ''}
+                                                      onChange={(e) => setYoutubeUrls(prev => ({
+                                                        ...prev,
+                                                        [itemReferenceId]: e.target.value
+                                                      }))}
+                                                      className="w-full p-3 bg-gray-700 text-white rounded border-2 border-blue-600 focus:border-blue-500 text-sm"
+                                                    />
+                                                  </div>
+                                                </div>
+
+                                                {/* Column 3: Manual Chord Input */}
+                                                <div className="flex flex-col">
+                                                  <div className="text-center mb-2">
+                                                    <p className="text-gray-400 text-sm font-medium">Manual Entry</p>
+                                                  </div>
+                                                  <div className="flex-1 flex flex-col justify-center">
+                                                    <textarea
+                                                      placeholder="Enter comma-separated chord names to generate chord charts&#10;section name (e.g. intro, verse, chorus) on a line by itself (optional)"
+                                                      value={manualChordInput[itemReferenceId] || ''}
+                                                      onChange={(e) => setManualChordInput(prev => ({
+                                                        ...prev,
+                                                        [itemReferenceId]: e.target.value
+                                                      }))}
+                                                      className="w-full p-3 bg-gray-700 text-white rounded border-2 border-blue-600 focus:border-blue-500 text-sm resize-none"
+                                                      rows="2"
+                                                    />
+                                                  </div>
+                                                </div>
+
+                                              </div>
 
                                           {/* Process Button */}
                                           <div className="flex justify-center">
@@ -3448,14 +3697,14 @@ export const PracticePage = () => {
                                               variant="outline"
                                               onClick={() => handleProcessFiles(itemReferenceId)}
                                               disabled={progress || (
-                                                // Must have either files or YouTube URL, but not both
-                                                (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() ||
-                                                (uploadedFiles[itemReferenceId] || []).length > 0 && youtubeUrls[itemReferenceId]?.trim()
+                                                // Must have exactly one input method
+                                                (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() && !manualChordInput[itemReferenceId]?.trim() ||
+                                                ((uploadedFiles[itemReferenceId] || []).length > 0 ? 1 : 0) + (youtubeUrls[itemReferenceId]?.trim() ? 1 : 0) + (manualChordInput[itemReferenceId]?.trim() ? 1 : 0) > 1
                                               )}
                                               className={`px-6 ${
                                                 progress || (
-                                                  (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() ||
-                                                  (uploadedFiles[itemReferenceId] || []).length > 0 && youtubeUrls[itemReferenceId]?.trim()
+                                                  (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() && !manualChordInput[itemReferenceId]?.trim() ||
+                                                  ((uploadedFiles[itemReferenceId] || []).length > 0 ? 1 : 0) + (youtubeUrls[itemReferenceId]?.trim() ? 1 : 0) + (manualChordInput[itemReferenceId]?.trim() ? 1 : 0) > 1
                                                 )
                                                   ? 'border-gray-600 text-gray-500 cursor-not-allowed'
                                                   : 'border-blue-600 text-blue-300 hover:bg-blue-800'
@@ -3678,7 +3927,8 @@ export const PracticePage = () => {
                                 <Button
                                   variant="outline"
                                   onClick={() => handleOpenCopyModal(itemReferenceId)}
-                                  className="w-full sm:w-1/2 border-purple-600 text-purple-300 hover:bg-purple-800"
+                                  disabled={!chordCharts[itemReferenceId] || chordCharts[itemReferenceId].length === 0}
+                                  className="w-full sm:w-1/2 border-purple-600 text-purple-300 hover:bg-purple-800 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Copy chord charts to other song
                                 </Button>

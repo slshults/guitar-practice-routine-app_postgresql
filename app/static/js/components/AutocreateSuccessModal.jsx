@@ -103,8 +103,8 @@ const AutocreateSuccessModal = ({ isOpen, onClose, autocreateData }) => {
           </DialogDescription>
         </DialogHeader>
         <div className="flex justify-end gap-2 -mt-2">
-          <Button onClick={onClose} className="min-w-20">
-            Uh, OK
+          <Button onClick={onClose} variant="outline" className="min-w-20">
+            Show me
           </Button>
         </div>
       </DialogContent>

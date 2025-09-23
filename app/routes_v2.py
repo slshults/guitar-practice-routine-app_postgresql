@@ -167,10 +167,14 @@ def batch_add_chord_charts(item_id):
         return jsonify({"error": "Request must be JSON"}), 400
 
     chord_charts_data = request.json
+    app.logger.info(f"[MANUAL] Batch add chord charts for item {item_id}, received {len(chord_charts_data) if isinstance(chord_charts_data, list) else 'invalid'} charts")
+    app.logger.info(f"[MANUAL] Chord charts data: {chord_charts_data}")
+
     if not isinstance(chord_charts_data, list):
         return jsonify({"error": "Request must be a list of chord charts"}), 400
 
     results = data_layer.batch_add_chord_charts(item_id, chord_charts_data)
+    app.logger.info(f"[MANUAL] Batch add results: {results}")
     return jsonify(results)
 
 @app.route('/api/chord-charts/batch-delete', methods=['POST'])
