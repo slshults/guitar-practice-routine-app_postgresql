@@ -2,6 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Dark mode CSS variables (default theme) - CRITICAL: This must match the design system */
+:root {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 217.2 32.6% 12%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 212.7 26.8% 83.9%;
+  --radius: .5rem;
+}
+
+/* Force dark button styling for chord chart buttons */
+.chord-charts-container button {
+  background-color: #1a1a1a !important;
+  color: #f0f0f0 !important;
+}
+
+/* Force dark styling for small edit/delete buttons on chord charts */
+.chord-charts-container button.bg-gray-900 {
+  background-color: hsl(217.2 32.6% 12%) !important;
+  color: hsl(210 40% 98%) !important;
+}
+
+/* Force dark styling for Button components inside chord charts container */
+.chord-charts-container .bg-primary {
+  background-color: hsl(217.2 32.6% 12%) !important;
+}
+
+.chord-charts-container .text-primary-foreground {
+  color: hsl(210 40% 98%) !important;
+}
+
+/* Target outline variant buttons that might be white */
+.chord-charts-container .bg-background {
+  background-color: hsl(217.2 32.6% 12%) !important;
+  color: hsl(210 40% 98%) !important;
+}
+
+/* Target any other button variants that might appear white */
+.chord-charts-container button[class*="bg-"]:not(.bg-blue-):not(.bg-green-):not(.bg-red-):not(.bg-purple-):not(.bg-orange-):not(.bg-yellow-) {
+  background-color: hsl(217.2 32.6% 12%) !important;
+  color: hsl(210 40% 98%) !important;
+}
+
 /* Custom styles for the guitar practice app */
 
 /* Modal scroll styling */

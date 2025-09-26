@@ -206,7 +206,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
           e.stopPropagation();
           onEdit(chart.id, chart);
         }}
-        className="absolute bottom-1 left-1 w-6 h-6 text-blue-400 hover:text-blue-200 flex items-center justify-center text-sm transition-colors cursor-pointer z-20 bg-gray-900 bg-opacity-75 rounded shadow-lg"
+        className="absolute bottom-1 left-1 w-6 h-6 text-gray-400 hover:text-gray-200 flex items-center justify-center text-sm transition-colors cursor-pointer z-20 bg-gray-900 bg-opacity-75 rounded shadow-lg"
         title="Edit chord chart"
         style={{
           position: 'absolute',
@@ -389,6 +389,7 @@ export const PracticePage = () => {
   // YouTube URL state for transcript-based chord creation
   const [youtubeUrls, setYoutubeUrls] = useState({});
   const [manualChordInput, setManualChordInput] = useState({});
+  const [manualInputErrors, setManualInputErrors] = useState({});
   const [showNoTranscriptModal, setShowNoTranscriptModal] = useState(false);
   const [noTranscriptData, setNoTranscriptData] = useState(null);
   const [manualTranscript, setManualTranscript] = useState('');
@@ -2460,7 +2461,47 @@ export const PracticePage = () => {
     
     setUploadedFiles(prev => ({ ...prev, [itemId]: Array.from(files) }));
   };
-  
+
+  // Validate manual chord input pattern
+  const validateManualChordInput = (input, itemId) => {
+    if (!input || input.trim().length === 0) {
+      setManualInputErrors(prev => ({ ...prev, [itemId]: null }));
+      return true;
+    }
+
+    const trimmedInput = input.trim();
+
+    // Pattern: Allow chord names (letters, numbers, #, b), commas, spaces, and section names on their own lines
+    // Valid examples: "C, G, Am, F", "verse\nC, G, Am\nchorus\nF, C, G", "Em7, A#, Bb"
+    const validPattern = /^[A-Ga-g0-9#b\s,\n\r-]+$/;
+
+    if (!validPattern.test(trimmedInput)) {
+      setManualInputErrors(prev => ({
+        ...prev,
+        [itemId]: 'Only chord names (A-G), numbers, #, b, commas, spaces, and section names are allowed'
+      }));
+      return false;
+    }
+
+    // Check for potentially problematic patterns
+    const lines = trimmedInput.split(/[\n\r]+/);
+    const hasValidContent = lines.some(line => {
+      const cleanLine = line.trim();
+      return cleanLine.length > 0 && (cleanLine.includes(',') || /^[A-Ga-g][A-Za-z0-9#b]*$/.test(cleanLine));
+    });
+
+    if (!hasValidContent) {
+      setManualInputErrors(prev => ({
+        ...prev,
+        [itemId]: 'Please enter chord names separated by commas (e.g., "C, G, Am, F")'
+      }));
+      return false;
+    }
+
+    setManualInputErrors(prev => ({ ...prev, [itemId]: null }));
+    return true;
+  };
+
   const handleProcessFiles = async (itemId) => {
     const files = uploadedFiles[itemId] || [];
     const youtubeUrl = youtubeUrls[itemId]?.trim();
@@ -2476,8 +2517,12 @@ export const PracticePage = () => {
 
     // Handle manual chord input if provided
     if (manualChords) {
-      await handleManualChordInput(itemId, manualChords);
-      return;
+      if (validateManualChordInput(manualChords, itemId)) {
+        await handleManualChordInput(itemId, manualChords);
+        return;
+      } else {
+        return; // Stop processing if validation fails
+      }
     }
 
     // Handle files if provided
@@ -2701,10 +2746,18 @@ export const PracticePage = () => {
   const handleYouTubeUrl = async (itemId, youtubeUrl) => {
     console.log(`[YOUTUBE] Processing YouTube URL for item ${itemId}:`, youtubeUrl);
 
-    // Validate YouTube URL format
-    const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+/;
-    if (!youtubeRegex.test(youtubeUrl)) {
-      alert('Please enter a valid YouTube URL');
+    // Sanitize and validate YouTube URL format
+    const sanitizedUrl = youtubeUrl.trim().replace(/[<>"']/g, '');
+    const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+(&[\w=&-]*)?$/;
+
+    if (!youtubeRegex.test(sanitizedUrl)) {
+      alert('Please enter a valid YouTube URL (youtube.com or youtu.be)');
+      return;
+    }
+
+    // Additional security check - ensure no script injection attempts
+    if (sanitizedUrl.includes('javascript:') || sanitizedUrl.includes('data:') || sanitizedUrl.includes('vbscript:')) {
+      alert('Invalid URL format');
       return;
     }
 
@@ -2716,7 +2769,7 @@ export const PracticePage = () => {
       const transcriptResponse = await fetch('/api/youtube/check-transcript', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: youtubeUrl })
+        body: JSON.stringify({ url: sanitizedUrl })
       });
 
       const transcriptResult = await transcriptResponse.json();
@@ -2728,7 +2781,7 @@ export const PracticePage = () => {
         await processYouTubeTranscript(itemId, transcriptResult.transcript);
       } else {
         // Show no transcript modal
-        setNoTranscriptData({ itemId, youtubeUrl });
+        setNoTranscriptData({ itemId, youtubeUrl: sanitizedUrl });
         setShowNoTranscriptModal(true);
         setAutocreateProgress(prev => {
           const newState = { ...prev };
@@ -3560,19 +3613,18 @@ export const PracticePage = () => {
                                   return (
                                     <div className="w-full mb-4">
                                       <Button
-                                        variant="outline"
-                                        onClick={() => setShowAutocreateZone(prev => ({ 
-                                          ...prev, 
-                                          [itemReferenceId]: !prev[itemReferenceId] 
+                                        onClick={() => setShowAutocreateZone(prev => ({
+                                          ...prev,
+                                          [itemReferenceId]: !prev[itemReferenceId]
                                         }))}
-                                        className="w-full border-green-600 text-green-300 hover:bg-green-800 mb-2 flex items-center justify-center"
+                                        className="w-full bg-gray-700 text-gray-300 hover:bg-gray-600 mb-2 flex items-center justify-center"
                                       >
                                         <Upload className="h-4 w-4 mr-2" />
                                         Autocreate Chord Charts
                                       </Button>
                                       
                                       {zoneExpanded && (
-                                        <div className="border border-green-600/30 rounded-lg p-4 bg-green-900/10">
+                                        <div className="border border-gray-600/30 rounded-lg p-4 bg-gray-800/10">
                                           <div className="text-sm text-gray-400 mb-6">
                                             <p>• Upload lyrics with chord names to create charts</p>
                                             <p>• Upload chord diagrams to import existing charts</p>
@@ -3591,8 +3643,8 @@ export const PracticePage = () => {
                                                   <div
                                                     className={`flex-1 p-4 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${
                                                       isDragActive[itemReferenceId]
-                                                        ? 'border-blue-400 bg-blue-900/20'
-                                                        : 'border-blue-600 hover:border-blue-500 bg-blue-900/10'
+                                                        ? 'border-gray-500 bg-gray-800/20'
+                                                        : 'border-gray-600 hover:border-gray-500 bg-gray-800/10'
                                                     }`}
                                                     onDragOver={(e) => {
                                                       e.preventDefault();
@@ -3628,17 +3680,17 @@ export const PracticePage = () => {
                                                   >
                                                     <div className="text-center">
                                                       <Upload className={`h-12 w-12 mx-auto mb-2 ${
-                                                        uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-400' : 'text-gray-400'
+                                                        uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-gray-300' : 'text-gray-400'
                                                       }`} />
                                                       <p className={`text-sm font-medium mb-2 ${
-                                                        uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-blue-300' : 'text-gray-300'
+                                                        uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? 'text-gray-200' : 'text-gray-300'
                                                       }`}>Drop files or click</p>
                                                       <p className="text-gray-400 text-xs mb-2">
                                                         PDFs, images • 5mb max
                                                       </p>
                                                       {uploadedFiles[itemReferenceId] && uploadedFiles[itemReferenceId].length > 0 ? (
                                                         <div>
-                                                          <p className="text-blue-400 text-xs font-medium mb-1">
+                                                          <p className="text-gray-300 text-xs font-medium mb-1">
                                                             {uploadedFiles[itemReferenceId].length} file(s)
                                                           </p>
                                                         </div>
@@ -3661,11 +3713,15 @@ export const PracticePage = () => {
                                                       type="url"
                                                       placeholder="YouTube guitar lesson URL (transcript required)"
                                                       value={youtubeUrls[itemReferenceId] || ''}
-                                                      onChange={(e) => setYoutubeUrls(prev => ({
-                                                        ...prev,
-                                                        [itemReferenceId]: e.target.value
-                                                      }))}
-                                                      className="w-full p-3 bg-gray-700 text-white rounded border-2 border-blue-600 focus:border-blue-500 text-sm"
+                                                      onChange={(e) => {
+                                                        const sanitizedValue = e.target.value.replace(/[<>"']/g, '');
+                                                        setYoutubeUrls(prev => ({
+                                                          ...prev,
+                                                          [itemReferenceId]: sanitizedValue
+                                                        }));
+                                                      }}
+                                                      maxLength={500}
+                                                      className="w-full p-3 bg-gray-700 text-white rounded border-2 border-gray-600 focus:border-gray-500 text-sm"
                                                     />
                                                   </div>
                                                 </div>
@@ -3675,17 +3731,36 @@ export const PracticePage = () => {
                                                   <div className="text-center mb-2">
                                                     <p className="text-gray-400 text-sm font-medium">Manual Entry</p>
                                                   </div>
-                                                  <div className="flex-1 flex flex-col justify-center">
+                                                  <div className="flex-1 flex flex-col justify-center relative">
                                                     <textarea
                                                       placeholder="Enter comma-separated chord names to generate chord charts&#10;section name (e.g. intro, verse, chorus) on a line by itself (optional)"
                                                       value={manualChordInput[itemReferenceId] || ''}
-                                                      onChange={(e) => setManualChordInput(prev => ({
-                                                        ...prev,
-                                                        [itemReferenceId]: e.target.value
-                                                      }))}
-                                                      className="w-full p-3 bg-gray-700 text-white rounded border-2 border-blue-600 focus:border-blue-500 text-sm resize-none"
-                                                      rows="2"
+                                                      onChange={(e) => {
+                                                        const value = e.target.value;
+                                                        if (value.length <= 500) {
+                                                          setManualChordInput(prev => ({
+                                                            ...prev,
+                                                            [itemReferenceId]: value
+                                                          }));
+                                                          // Validate on change
+                                                          validateManualChordInput(value, itemReferenceId);
+                                                        }
+                                                      }}
+                                                      maxLength={500}
+                                                      className={`w-full p-3 text-white rounded border-2 focus:border-gray-500 text-sm resize-none min-h-[120px] ${
+                                                        manualInputErrors[itemReferenceId] ? 'bg-red-900/20 border-red-500' : 'bg-gray-700 border-gray-600'
+                                                      }`}
                                                     />
+                                                    {/* Character counter */}
+                                                    <div className="absolute bottom-1 right-2 text-xs text-gray-400">
+                                                      {(manualChordInput[itemReferenceId] || '').length}/500
+                                                    </div>
+                                                    {/* Error message */}
+                                                    {manualInputErrors[itemReferenceId] && (
+                                                      <div className="mt-1 text-xs text-red-400">
+                                                        {manualInputErrors[itemReferenceId]}
+                                                      </div>
+                                                    )}
                                                   </div>
                                                 </div>
 
@@ -3694,21 +3769,13 @@ export const PracticePage = () => {
                                           {/* Process Button */}
                                           <div className="flex justify-center">
                                             <Button
-                                              variant="outline"
                                               onClick={() => handleProcessFiles(itemReferenceId)}
                                               disabled={progress || (
                                                 // Must have exactly one input method
                                                 (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() && !manualChordInput[itemReferenceId]?.trim() ||
                                                 ((uploadedFiles[itemReferenceId] || []).length > 0 ? 1 : 0) + (youtubeUrls[itemReferenceId]?.trim() ? 1 : 0) + (manualChordInput[itemReferenceId]?.trim() ? 1 : 0) > 1
                                               )}
-                                              className={`px-6 ${
-                                                progress || (
-                                                  (uploadedFiles[itemReferenceId] || []).length === 0 && !youtubeUrls[itemReferenceId]?.trim() && !manualChordInput[itemReferenceId]?.trim() ||
-                                                  ((uploadedFiles[itemReferenceId] || []).length > 0 ? 1 : 0) + (youtubeUrls[itemReferenceId]?.trim() ? 1 : 0) + (manualChordInput[itemReferenceId]?.trim() ? 1 : 0) > 1
-                                                )
-                                                  ? 'border-gray-600 text-gray-500 cursor-not-allowed'
-                                                  : 'border-blue-600 text-blue-300 hover:bg-blue-800'
-                                              }`}
+                                              className="px-6"
                                             >
                                               <Wand className="h-4 w-4 mr-2" />
                                               Create Chord Charts
@@ -3719,7 +3786,7 @@ export const PracticePage = () => {
 
                                           {/* Progress/Status Display */}
                                           <div
-                                            className="w-full p-6 border-2 border-dashed rounded-lg mt-4 bg-gray-800/50 border-gray-600"
+                                            className="w-full p-6 border-2 border-dashed rounded-lg mt-4 bg-gray-800/10 border-gray-600/50"
                                           >
                                             <div className="text-center">
                                               {progress === 'checking_transcripts' && (
@@ -3743,8 +3810,8 @@ export const PracticePage = () => {
                                               {progress === 'reading_transcript' && (
                                                 <div className="space-y-3">
                                                   <div className="flex items-center justify-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                                                    <span className="text-blue-400">Reading transcript...</span>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                                                    <span className="text-gray-400">Reading transcript...</span>
                                                   </div>
                                                   <br />
                                                   <Button
@@ -3761,8 +3828,8 @@ export const PracticePage = () => {
                                               {progress === 'uploading' && (
                                                 <div className="space-y-3">
                                                   <div className="flex items-center justify-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                                                    <span className="text-blue-400">Uploading files...</span>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                                                    <span className="text-gray-400">Uploading files...</span>
                                                   </div>
                                                   <br />
                                                   <Button
@@ -3845,8 +3912,8 @@ export const PracticePage = () => {
                                                         if (hasFiles) {
                                                           return (
                                                             <>
-                                                              <Sparkles className="h-8 w-8 text-blue-400 mx-auto mb-2" />
-                                                              <p className="text-blue-300 font-medium mb-1">Ready to create chord charts</p>
+                                                              <Sparkles className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                                              <p className="text-gray-300 font-medium mb-1">Ready to create chord charts</p>
                                                               <p className="text-gray-400 text-sm">
                                                                 Click 'Create chord charts'
                                                               </p>
@@ -3888,7 +3955,7 @@ export const PracticePage = () => {
                               })()}
 
                               <Button
-                                variant="outline"
+                                variant="default"
                                 onClick={() => {
                                   setScrollBackContext({
                                     itemId: itemReferenceId,
@@ -3902,15 +3969,15 @@ export const PracticePage = () => {
                                     }
                                   }, 100);
                                 }}
-                                className="w-full mb-4 border-green-600 text-green-300 hover:bg-green-800"
+                                className="w-full mb-4"
                               >
                                 + Add New Chord
                               </Button>
 
                               <Button
-                                variant="outline"
+                                variant="default"
                                 onClick={() => addNewSection(itemReferenceId)}
-                                className="w-full mb-4 border-gray-600"
+                                className="w-full mb-4"
                               >
                                 + Add New Section
                               </Button>
@@ -3918,17 +3985,17 @@ export const PracticePage = () => {
                               {/* Copy buttons - responsive: side-by-side on desktop, stacked on mobile */}
                               <div className="flex flex-col sm:flex-row gap-2 mb-4 w-full">
                                 <Button
-                                  variant="outline"
+                                  variant="default"
                                   onClick={() => handleOpenCopyFromModal(itemReferenceId)}
-                                  className="w-full sm:w-1/2 border-blue-600 text-blue-300 hover:bg-blue-800"
+                                  className="w-full sm:w-1/2"
                                 >
                                   Copy chord charts from other song
                                 </Button>
                                 <Button
-                                  variant="outline"
+                                  variant="default"
                                   onClick={() => handleOpenCopyModal(itemReferenceId)}
                                   disabled={!chordCharts[itemReferenceId] || chordCharts[itemReferenceId].length === 0}
-                                  className="w-full sm:w-1/2 border-purple-600 text-purple-300 hover:bg-purple-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="w-full sm:w-1/2 bg-purple-700 text-purple-300 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   Copy chord charts to other song
                                 </Button>
@@ -4020,7 +4087,7 @@ export const PracticePage = () => {
                                 body: JSON.stringify({ path: itemDetails['F'] })
                               }).catch(err => console.error('Error opening folder:', err));
                             }}
-                            className="text-blue-500 hover:text-blue-400 hover:underline flex items-center"
+                            className="text-gray-400 hover:text-gray-300 hover:underline flex items-center"
                           >
                             <Book className="h-4 w-4 mr-2" />
                             Open Songbook Folder
@@ -4474,7 +4541,7 @@ export const PracticePage = () => {
                 className={`flex-1 ${
                   !manualTranscript.trim()
                     ? 'border-gray-600 text-gray-500 cursor-not-allowed'
-                    : 'border-blue-600 text-blue-300 hover:bg-blue-800'
+                    : 'border-gray-600 text-gray-300 hover:bg-gray-700'
                 }`}
               >
                 <Wand className="h-4 w-4 mr-2" />
