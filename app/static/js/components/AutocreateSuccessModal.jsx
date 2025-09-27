@@ -43,7 +43,7 @@ const AutocreateSuccessModal = ({ isOpen, onClose, autocreateData }) => {
         <p className="font-medium">Success! Or close to it!</p>
         <p>We did the best we could. You'll likely need to make a few corrections.</p>
         <p>Click the pencil icon on a chord chart to fix it.</p>
-        <p>Be sure to click the <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-sm">"Update chord chart"</code> button after edits</p>
+        <p>Be sure to click the <code className="px-1 py-0.5 bg-gray-700 text-gray-300 rounded text-sm">"Update chord chart"</code> button after edits</p>
       </div>
     );
   };
@@ -86,12 +86,12 @@ const AutocreateSuccessModal = ({ isOpen, onClose, autocreateData }) => {
           <DialogDescription className="text-left space-y-1">
             {getDescription()}
 
-            <div className="bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded-lg">
-              <div className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <div className="bg-gray-800 px-2 py-1 rounded-lg">
+              <div className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-1">
                 <FileText className="h-4 w-4" />
                 <span>Processing Details</span>
               </div>
-              <ul className="text-sm text-gray-600 dark:text-gray-400">
+              <ul className="text-sm text-gray-400">
                 {getDetails().map((detail, index) => (
                   <li key={index} className="flex items-center gap-1">
                     <span className="w-1 h-1 bg-gray-400 rounded-full"></span>

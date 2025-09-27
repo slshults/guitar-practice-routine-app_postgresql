@@ -206,8 +206,27 @@ class ChordChartRepository(BaseRepository):
     
     def _from_sheets_format(self, sheets_data: Dict[str, Any]) -> Dict[str, Any]:
         """Convert Sheets API format to SQLAlchemy format."""
-        return {
-            'title': sheets_data.get('C', ''),
-            'chord_data': sheets_data.get('D', {}),
-            'order_col': int(sheets_data.get('F', 0)) if sheets_data.get('F') else 0
-        }
+
+        # Handle both old Sheets column format (C, D, F) and new flattened frontend format
+        if 'C' in sheets_data or 'D' in sheets_data or 'F' in sheets_data:
+            # Old Google Sheets column format
+            return {
+                'title': sheets_data.get('C', ''),
+                'chord_data': sheets_data.get('D', {}),
+                'order_col': int(sheets_data.get('F', 0)) if sheets_data.get('F') else 0
+            }
+        else:
+            # New flattened frontend format - build chord_data from individual properties
+            title = sheets_data.get('title', '')
+
+            # Extract all non-title properties into chord_data (matching sheets version behavior)
+            chord_data = {}
+            for key, value in sheets_data.items():
+                if key not in ['title', 'id', 'itemId', 'createdAt', 'order']:
+                    chord_data[key] = value
+
+            return {
+                'title': title,
+                'chord_data': chord_data,
+                'order_col': int(sheets_data.get('order', 0)) if sheets_data.get('order') else 0
+            }

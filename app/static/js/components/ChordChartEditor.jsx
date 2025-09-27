@@ -218,13 +218,20 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
             );
             
             if (chordToEdit) {
+              console.log('Loading chord for editing:', {
+                id: chordToEdit.id,
+                title: chordToEdit.title,
+                hasLineBreakAfter: chordToEdit.hasLineBreakAfter,
+                editingChordId
+              });
+
               setTitle(chordToEdit.title || '');
               setStartingFret(chordToEdit.startingFret || 1);
               setNumFrets(chordToEdit.numFrets || 5);
               setNumStrings(chordToEdit.numStrings || 6);
               setTuning(chordToEdit.tuning || defaultTuning);
               setCapo(chordToEdit.capo || 0);
-              
+
               // Load finger positions (preserve finger numbers)
               const fingersData = chordToEdit.fingers || [];
               const normalizedFingers = fingersData.map(finger => {
@@ -241,19 +248,23 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
                 const [s, f, num] = Array.isArray(finger) ? finger : [finger[0], finger[1], finger[2]];
                 return [s, f, num];
               });
-              
+
               setFingers(normalizedFingers);
-              
+
               // Handle barres - the stored barre fret numbers might need adjustment
               // based on the loaded chord's startingFret
               const loadedBarres = chordToEdit.barres || [];
-              
+
               // No need to adjust barre fret numbers when loading - they should be stored correctly
               // The issue was in the display/click detection, not in storage
               setBarres(loadedBarres);
               setOpenStrings(new Set(chordToEdit.openStrings || []));
               setMutedStrings(new Set(chordToEdit.mutedStrings || []));
-              setAddLineBreak(chordToEdit.hasLineBreakAfter || false); // Load existing line break status
+
+              // Load existing line break status with debug logging
+              const lineBreakValue = chordToEdit.hasLineBreakAfter || false;
+              console.log('Setting addLineBreak to:', lineBreakValue, 'from hasLineBreakAfter:', chordToEdit.hasLineBreakAfter);
+              setAddLineBreak(lineBreakValue);
             } else {
             }
           } else {
@@ -970,14 +981,14 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
           <Button 
             onClick={() => {
               
-              const saveData = { 
-                title, 
-                startingFret, 
-                numFrets, 
-                numStrings, 
-                tuning, 
-                capo, 
-                fingers, 
+              const saveData = {
+                title,
+                startingFret,
+                numFrets,
+                numStrings,
+                tuning,
+                capo,
+                fingers,
                 barres,
                 openStrings: Array.from(openStrings),
                 mutedStrings: Array.from(mutedStrings),
@@ -987,8 +998,14 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
                 // Include insertion context for proper positioning and section metadata
                 insertionContext
               };
-              
-              
+
+              console.log('Saving chord with line break data:', {
+                title,
+                addLineBreak,
+                startOnNewLine: addLineBreak,
+                editingChordId
+              });
+
               onSave(saveData);
             }} 
             className={`flex-1 ${title.trim() ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}

@@ -13,7 +13,7 @@ declare -a PIDS=()
 # Function to cleanup processes on exit
 cleanup() {
     echo -e "\n${BLUE}Cleaning up processes...${NC}"
-    
+
     # Kill all stored PIDs and their children
     for pid in "${PIDS[@]}"; do
         if kill -0 $pid 2>/dev/null; then
@@ -25,7 +25,7 @@ cleanup() {
             kill -KILL $pid 2>/dev/null
         fi
     done
-    
+
     # Additional cleanup for any remaining processes
     for cmd in "flask run" "npm run watch" "inotifywait" "python.*run.py"; do
         pids=$(pgrep -f "$cmd" 2>/dev/null)
@@ -36,7 +36,7 @@ cleanup() {
             pkill -KILL -f "$cmd" 2>/dev/null
         fi
     done
-    
+
     echo -e "${GREEN}Cleanup complete${NC}"
     exit 0
 }
@@ -54,6 +54,74 @@ is_process_running() {
         return 0
     else
         return 1
+    fi
+}
+
+# Function to check PostgreSQL health
+check_postgres_health() {
+    echo -e "${BLUE}Checking PostgreSQL health...${NC}"
+
+    # Check if PostgreSQL is accepting connections
+    if pg_isready -h localhost -p 5432 >/dev/null 2>&1; then
+        echo -e "${GREEN}PostgreSQL is healthy and accepting connections${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}PostgreSQL is not accepting connections${NC}"
+        return 1
+    fi
+}
+
+# Function to attempt PostgreSQL recovery
+recover_postgres() {
+    echo -e "${YELLOW}Attempting PostgreSQL recovery...${NC}"
+
+    # Step 1: Try pg_ctlcluster (equivalent to pgfix)
+    echo -e "${BLUE}Step 1: Starting PostgreSQL cluster...${NC}"
+    if sudo pg_ctlcluster 14 main start >/dev/null 2>&1; then
+        echo -e "${GREEN}PostgreSQL cluster started successfully${NC}"
+        sleep 2
+        if check_postgres_health; then
+            return 0
+        fi
+    else
+        echo -e "${YELLOW}PostgreSQL cluster start failed, trying service start...${NC}"
+    fi
+
+    # Step 2: Try service start (equivalent to pgstart)
+    echo -e "${BLUE}Step 2: Starting PostgreSQL service...${NC}"
+    if sudo -u postgres service postgresql start >/dev/null 2>&1; then
+        echo -e "${GREEN}PostgreSQL service started successfully${NC}"
+        sleep 3
+        if check_postgres_health; then
+            return 0
+        fi
+    else
+        echo -e "${YELLOW}PostgreSQL service start failed${NC}"
+    fi
+
+    # Step 3: Last resort - try systemctl
+    echo -e "${BLUE}Step 3: Trying systemctl start...${NC}"
+    if sudo systemctl start postgresql >/dev/null 2>&1; then
+        echo -e "${GREEN}PostgreSQL started via systemctl${NC}"
+        sleep 3
+        if check_postgres_health; then
+            return 0
+        fi
+    fi
+
+    echo -e "${RED}All PostgreSQL recovery attempts failed${NC}"
+    return 1
+}
+
+# Function to ensure PostgreSQL is ready
+ensure_postgres_ready() {
+    if ! check_postgres_health; then
+        echo -e "${YELLOW}PostgreSQL is not ready, attempting recovery...${NC}"
+        if recover_postgres; then
+            echo -e "${GREEN}PostgreSQL recovery successful!${NC}"
+        else
+            handle_error "Failed to start PostgreSQL. Please run 'pgfix' and 'pgstart' manually"
+        fi
     fi
 }
 
@@ -79,6 +147,9 @@ nvm use 18 || handle_error "Failed to set Node.js version"
 # Initial build
 echo -e "${GREEN}Building assets...${NC}"
 npm run build || handle_error "Failed to build assets"
+
+# Ensure PostgreSQL is ready before starting Flask
+ensure_postgres_ready
 
 # Start Flask with auto-reloader (but in prod mode)
 echo -e "${GREEN}Starting Flask server...${NC}"

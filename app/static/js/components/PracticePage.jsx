@@ -805,7 +805,7 @@ export const PracticePage = () => {
     } catch (error) {
       console.error('Error batch loading chord charts:', error);
     }
-  }, [routine, chordCharts]);
+  }, [routine]);
   
   // Batch load chord charts when routine changes
   useEffect(() => {
@@ -2471,14 +2471,14 @@ export const PracticePage = () => {
 
     const trimmedInput = input.trim();
 
-    // Pattern: Allow chord names (letters, numbers, #, b), commas, spaces, and section names on their own lines
-    // Valid examples: "C, G, Am, F", "verse\nC, G, Am\nchorus\nF, C, G", "Em7, A#, Bb"
-    const validPattern = /^[A-Ga-g0-9#b\s,\n\r-]+$/;
+    // Pattern: Allow chord names (letters, numbers, #, b, ♭, ♯, /), commas, spaces, and section names on their own lines
+    // Valid examples: "C, G, Am, F", "verse\nC, G, Am\nchorus\nF, C, G", "Em7, A#, Bb", "Intro D A G D", "C/G"
+    const validPattern = /^[A-Za-z0-9#b♭♯\/\s,\n\r-]+$/;
 
     if (!validPattern.test(trimmedInput)) {
       setManualInputErrors(prev => ({
         ...prev,
-        [itemId]: 'Only chord names (A-G), numbers, #, b, commas, spaces, and section names are allowed'
+        [itemId]: 'Only chord names (A-G), numbers, #, b, ♭, ♯, /, commas, spaces, and section names are allowed'
       }));
       return false;
     }
@@ -2487,13 +2487,22 @@ export const PracticePage = () => {
     const lines = trimmedInput.split(/[\n\r]+/);
     const hasValidContent = lines.some(line => {
       const cleanLine = line.trim();
-      return cleanLine.length > 0 && (cleanLine.includes(',') || /^[A-Ga-g][A-Za-z0-9#b]*$/.test(cleanLine));
+      if (cleanLine.length === 0) return false;
+
+      // Check if this is a section name (single word, letters only)
+      if (/^[A-Za-z]+$/.test(cleanLine)) return true;
+
+      // Check if this line contains only chords (space-separated or comma-separated)
+      const words = cleanLine.split(/[,\s]+/).filter(word => word.trim().length > 0);
+      const allWordsAreChords = words.every(word => /^[A-Ga-g][A-Za-z0-9#b♭♯\/]*$/.test(word));
+
+      return allWordsAreChords;
     });
 
     if (!hasValidContent) {
       setManualInputErrors(prev => ({
         ...prev,
-        [itemId]: 'Please enter chord names separated by commas (e.g., "C, G, Am, F")'
+        [itemId]: 'Please enter chord names separated by commas, spaces, or section names (e.g., "C, G, Am, F" or "D A G D" or "Intro")'
       }));
       return false;
     }
@@ -2543,192 +2552,58 @@ export const PracticePage = () => {
     }));
 
     try {
-      // Parse the chord input and create chord charts directly
-      const lines = chordInput.split('\n').map(line => line.trim()).filter(line => line);
-      const sections = [];
-      let currentSection = { label: 'Default', chords: [] };
+      // Create a text file from the manual input and send it to the autocreate endpoint
+      const textBlob = new Blob([chordInput], { type: 'text/plain' });
+      const textFile = new File([textBlob], 'manual-input.txt', { type: 'text/plain' });
 
-      for (const line of lines) {
-        // Check if this line is a section name (no commas)
-        if (!line.includes(',') && !line.match(/^[A-G]/)) {
-          // This is a section name
-          if (currentSection.chords.length > 0) {
-            sections.push(currentSection);
-          }
-          currentSection = { label: line, chords: [] };
-        } else {
-          // This is a chord line - split by commas
-          const chords = line.split(',').map(chord => chord.trim()).filter(chord => chord);
-          currentSection.chords.push(...chords);
-        }
-      }
+      const formData = new FormData();
+      formData.append('file0', textFile);
+      formData.append('itemId', itemId);
+      formData.append('userChoice', 'chord_names'); // Indicate this is chord names input
 
-      // Add the last section
-      if (currentSection.chords.length > 0) {
-        sections.push(currentSection);
-      }
+      console.log(`[AUTOCREATE] Sending manual input to autocreate endpoint`);
 
-      // Create chord charts by looking up shapes from CommonChords
-      const chordChartsToCreate = [];
-      let order = 0;
-
-      for (const section of sections) {
-        for (const chordName of section.chords) {
-          try {
-            // Look up chord shape from CommonChords database
-            console.log(`[MANUAL] Looking up chord: ${chordName}`);
-            const searchResponse = await fetch(`/api/chord-charts/common/search?name=${encodeURIComponent(chordName)}`);
-            let chordData = {
-              fingers: [],
-              barres: [],
-              capo: 0,
-              tuning: "EADGBE",
-              numFrets: 5,
-              numStrings: 6,
-              startingFret: 1,
-              sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
-              sectionLabel: section.label,
-              sectionRepeatCount: ""
-            };
-
-            if (searchResponse.ok) {
-              const commonChords = await searchResponse.json();
-              console.log(`[MANUAL] Search result for ${chordName}:`, commonChords);
-              if (commonChords.length > 0) {
-                // Use the first match from CommonChords
-                const commonChord = commonChords[0];
-                console.log(`[MANUAL] Using chord data for ${chordName}:`, commonChord);
-                chordData = {
-                  ...chordData,
-                  fingers: commonChord.fingers || [],
-                  barres: commonChord.barres || [],
-                  capo: commonChord.capo || 0,
-                  tuning: commonChord.tuning || "EADGBE",
-                  numFrets: commonChord.numFrets || 5,
-                  numStrings: commonChord.numStrings || 6,
-                  startingFret: commonChord.startingFret || 1,
-                  openStrings: commonChord.openStrings || [],
-                  mutedStrings: commonChord.mutedStrings || []
-                };
-              } else {
-                console.log(`[MANUAL] No CommonChords found for ${chordName}`);
-              }
-            } else {
-              console.error(`[MANUAL] Search failed for ${chordName}:`, searchResponse.status, searchResponse.statusText);
-            }
-
-            chordChartsToCreate.push({
-              title: chordName,
-              sectionLabel: section.label,
-              sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
-              sectionRepeatCount: "",
-              order: order++,
-              chordData: chordData
-            });
-          } catch (error) {
-            console.error(`Error looking up chord ${chordName}:`, error);
-            // Fallback to empty chord if lookup fails
-            chordChartsToCreate.push({
-              title: chordName,
-              sectionLabel: section.label,
-              sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
-              sectionRepeatCount: "",
-              order: order++,
-              chordData: {
-                fingers: [],
-                barres: [],
-                capo: 0,
-                tuning: "EADGBE",
-                numFrets: 5,
-                numStrings: 6,
-                startingFret: 1,
-                sectionId: `section-${section.label.toLowerCase().replace(/\s+/g, '-')}`,
-                sectionLabel: section.label,
-                sectionRepeatCount: ""
-              }
-            });
-          }
-        }
-      }
-
-      if (chordChartsToCreate.length === 0) {
-        alert('No valid chord names found in the input.');
-        setAutocreateProgress(prev => {
-          const newState = { ...prev };
-          delete newState[itemId];
-          return newState;
-        });
-        return;
-      }
-
-      // Call the backend to create chord charts using existing batch endpoint
-      console.log(`[MANUAL] Creating ${chordChartsToCreate.length} chord charts for item ${itemId}`);
-      const batchData = chordChartsToCreate.map(chord => ({
-        title: chord.title,
-        sectionLabel: chord.sectionLabel,
-        sectionId: chord.sectionId,
-        sectionRepeatCount: chord.sectionRepeatCount,
-        order: chord.order,
-        chord_data: chord.chordData  // Use snake_case to match repository expectations
-      }));
-      console.log(`[MANUAL] Batch data:`, batchData);
-
-      const response = await fetch('/api/items/' + itemId + '/chord-charts/batch', {
+      const response = await fetch('/api/autocreate-chord-charts', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(batchData)
+        body: formData
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to create chord charts: ${response.status}`);
+        const errorData = await response.text();
+        throw new Error(`Failed to process manual input: ${response.status} ${response.statusText} - ${errorData}`);
       }
 
       const result = await response.json();
-      console.log('[MANUAL] Chord charts created successfully:', result);
+      console.log(`[AUTOCREATE] Manual input processed successfully:`, result);
 
-      // Show success modal
-      const itemDetails = getItemDetails(itemId);
-      setAutocreateSuccessData({
-        itemName: itemDetails?.['C'] || `Item ${itemId}`,
-        chordCount: chordChartsToCreate.length,
-        contentType: 'manual_input',
-        uploadedFileNames: 'Manual chord entry',
-        isVisionAnalysis: false
-      });
-      setShowAutocreateSuccessModal(true);
+      // Force refresh UI state - same as other autocreate methods
+      const chartResponse = await fetch(`/api/items/${itemId}/chord-charts`);
+      const charts = await chartResponse.json();
 
-      // Force refresh chord charts
-      try {
-        const chartsResponse = await fetch(`/api/items/${itemId}/chord-charts`);
-        if (chartsResponse.ok) {
-          const charts = await chartsResponse.json();
-          setChordCharts(prev => ({
-            ...prev,
-            [itemId]: charts
-          }));
+      setChordCharts(prev => ({
+        ...prev,
+        [itemId]: charts
+      }));
 
-          // Build sections from loaded chord charts
-          if (charts.length === 0) {
-            setChordSections(prev => ({
-              ...prev,
-              [itemId]: []
-            }));
-          } else {
-            const sections = buildSectionsFromCharts(charts);
-            setChordSections(prev => ({
-              ...prev,
-              [itemId]: sections
-            }));
-          }
-        }
-      } catch (error) {
-        console.error('Error refreshing chord charts:', error);
-      }
+      setChordSections(prev => ({
+        ...prev,
+        [itemId]: buildSectionsFromCharts(charts)
+      }));
 
       // Clear the manual input
-      setManualChordInput(prev => ({ ...prev, [itemId]: '' }));
+      setManualChordInput(prev => ({
+        ...prev,
+        [itemId]: ''
+      }));
+
+      // Show success modal - same as other autocreate methods
+      const itemDetails = getItemDetails(itemId);
+      setAutocreateSuccessData({
+        itemTitle: itemDetails?.C || `Item ${itemId}`,
+        chordsCreated: charts.length,
+        processingMethod: 'Manual Entry'
+      });
+      setShowAutocreateSuccessModal(true);
 
     } catch (error) {
       console.error('Error processing manual chord input:', error);
@@ -2743,6 +2618,7 @@ export const PracticePage = () => {
     }
   };
 
+
   const handleYouTubeUrl = async (itemId, youtubeUrl) => {
     console.log(`[YOUTUBE] Processing YouTube URL for item ${itemId}:`, youtubeUrl);
 
@@ -2751,55 +2627,82 @@ export const PracticePage = () => {
     const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+(&[\w=&-]*)?$/;
 
     if (!youtubeRegex.test(sanitizedUrl)) {
-      alert('Please enter a valid YouTube URL (youtube.com or youtu.be)');
+      setApiError({ message: 'Please enter a valid YouTube URL (e.g., https://youtube.com/watch?v=...)' });
+      setShowApiErrorModal(true);
       return;
     }
 
-    // Additional security check - ensure no script injection attempts
-    if (sanitizedUrl.includes('javascript:') || sanitizedUrl.includes('data:') || sanitizedUrl.includes('vbscript:')) {
-      alert('Invalid URL format');
-      return;
-    }
+    setAutocreateProgress(prev => ({
+      ...prev,
+      [itemId]: 'processing'
+    }));
 
     try {
-      // Set processing state
-      setAutocreateProgress(prev => ({ ...prev, [itemId]: 'checking_transcripts' }));
+      // Create a mock text file to send the YouTube URL via the autocreate endpoint
+      const youtubeBlob = new Blob([sanitizedUrl], { type: 'text/plain' });
+      const youtubeFile = new File([youtubeBlob], 'youtube_transcript.txt', { type: 'text/plain' });
 
-      // Check for transcripts
-      const transcriptResponse = await fetch('/api/youtube/check-transcript', {
+      const formData = new FormData();
+      formData.append('file0', youtubeFile);
+      formData.append('itemId', itemId);
+      formData.append('userChoice', 'chord_names'); // This will trigger chord name processing
+
+      console.log(`[AUTOCREATE] Sending YouTube URL to autocreate endpoint`);
+
+      const response = await fetch('/api/autocreate-chord-charts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: sanitizedUrl })
+        body: formData
       });
 
-      const transcriptResult = await transcriptResponse.json();
-
-      if (transcriptResult.hasTranscript) {
-        // Process the transcript as chord_names content
-        setAutocreateProgress(prev => ({ ...prev, [itemId]: 'processing_transcript' }));
-
-        await processYouTubeTranscript(itemId, transcriptResult.transcript);
-      } else {
-        // Show no transcript modal
-        setNoTranscriptData({ itemId, youtubeUrl: sanitizedUrl });
-        setShowNoTranscriptModal(true);
-        setAutocreateProgress(prev => {
-          const newState = { ...prev };
-          delete newState[itemId];
-          return newState;
-        });
+      if (!response.ok) {
+        const errorData = await response.text();
+        throw new Error(`Failed to process YouTube URL: ${response.status} ${response.statusText} - ${errorData}`);
       }
+
+      const result = await response.json();
+      console.log(`[AUTOCREATE] YouTube URL processed successfully:`, result);
+
+      // Force refresh UI state
+      const chartResponse = await fetch(`/api/items/${itemId}/chord-charts`);
+      const charts = await chartResponse.json();
+
+      setChordCharts(prev => ({
+        ...prev,
+        [itemId]: charts
+      }));
+
+      setChordSections(prev => ({
+        ...prev,
+        [itemId]: buildSectionsFromCharts(charts)
+      }));
+
+      // Clear the YouTube input
+      setYoutubeUrls(prev => ({
+        ...prev,
+        [itemId]: ''
+      }));
+
+      // Show success modal
+      const itemDetails = getItemDetails(itemId);
+      setAutocreateSuccessData({
+        itemTitle: itemDetails?.C || `Item ${itemId}`,
+        chordsCreated: charts.length,
+        processingMethod: 'YouTube URL'
+      });
+      setShowAutocreateSuccessModal(true);
 
     } catch (error) {
       console.error('Error processing YouTube URL:', error);
       setApiError({ message: 'Failed to process YouTube URL. Please try again.' });
       setShowApiErrorModal(true);
+    } finally {
       setAutocreateProgress(prev => {
         const newState = { ...prev };
         delete newState[itemId];
         return newState;
       });
     }
+
   };
 
   const processYouTubeTranscript = async (itemId, transcript) => {
@@ -3733,7 +3636,7 @@ export const PracticePage = () => {
                                                   </div>
                                                   <div className="flex-1 flex flex-col justify-center relative">
                                                     <textarea
-                                                      placeholder="Enter comma-separated chord names to generate chord charts&#10;section name (e.g. intro, verse, chorus) on a line by itself (optional)"
+                                                      placeholder="Enter song section names and chord names, like this:&#10;Intro&#10;Am7 Em/A E7sus&#10;Verse&#10;C G/B Am (space or comma-separated)"
                                                       value={manualChordInput[itemReferenceId] || ''}
                                                       onChange={(e) => {
                                                         const value = e.target.value;
@@ -3747,7 +3650,7 @@ export const PracticePage = () => {
                                                         }
                                                       }}
                                                       maxLength={500}
-                                                      className={`w-full p-3 text-white rounded border-2 focus:border-gray-500 text-sm resize-none min-h-[120px] ${
+                                                      className={`w-full p-3 text-white rounded border-2 focus:border-gray-500 text-sm resize-none min-h-[160px] ${
                                                         manualInputErrors[itemReferenceId] ? 'bg-red-900/20 border-red-500' : 'bg-gray-700 border-gray-600'
                                                       }`}
                                                     />
@@ -3847,7 +3750,7 @@ export const PracticePage = () => {
                                                 <div className="space-y-3">
                                                   <div className="flex items-center justify-center space-x-2">
                                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
-                                                    <span className="text-purple-400">Processing transcript...</span>
+                                                    <span className="text-white">Processing transcript...</span>
                                                   </div>
                                                   <br />
                                                   <Button
@@ -3866,7 +3769,7 @@ export const PracticePage = () => {
                                                   <div className="flex items-center justify-center space-x-2">
                                                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
                                                     <div className="flex items-center">
-                                                      <span className="text-purple-400">{processingMessages[processingMessageIndex]}</span>
+                                                      <span className="text-white">{processingMessages[processingMessageIndex]}</span>
                                                       <div className="ml-2 animate-spin">⚙️</div>
                                                     </div>
                                                   </div>
@@ -3945,7 +3848,7 @@ export const PracticePage = () => {
                                     <Button
                                       variant="outline"
                                       onClick={() => handleAutocreateClick(itemReferenceId)}
-                                      className="w-full mb-4 border-orange-600 text-orange-300 hover:bg-orange-800"
+                                      className="w-full mb-4 text-orange-300 hover:bg-orange-800 hover:border-orange-600"
                                     >
                                       <Upload className="h-4 w-4 mr-2" />
                                       Replace with autocreated charts
