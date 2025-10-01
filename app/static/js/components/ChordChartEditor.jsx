@@ -10,8 +10,8 @@ const defaultChartConfig = {
   sidePadding: 0.2,       // Standard padding
   fontFamily: 'Arial',
   // Key: set explicit dimensions that work well
-  width: 220,             // Even larger width for better visibility
-  height: 310,            // Even larger height (taller than wide)
+  width: 160,             // Compact width matching container
+  height: 220,            // Compact height matching container
   // Dark theme colors for visibility
   color: '#ffffff',           // White finger dots
   backgroundColor: 'transparent',
@@ -732,15 +732,15 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
         if (editorSvg) {
           editorSvg.style.width = '100%';
           editorSvg.style.height = '100%';
-          editorSvg.style.maxWidth = '208px';  // Match container width w-52
-          editorSvg.style.maxHeight = '320px'; // Match container height h-80
+          editorSvg.style.maxWidth = '160px';  // Match container width w-40
+          editorSvg.style.maxHeight = '224px'; // Match container height h-56
         }
-        
+
         if (resultSvg) {
           resultSvg.style.width = '100%';
           resultSvg.style.height = '100%';
-          resultSvg.style.maxWidth = '208px';  // Match container width w-52
-          resultSvg.style.maxHeight = '320px'; // Match container height h-80
+          resultSvg.style.maxWidth = '160px';  // Match container width w-40
+          resultSvg.style.maxHeight = '224px'; // Match container height h-56
         }
         
         setupEditorInteraction();
@@ -884,18 +884,18 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
         {/* Editor and Result sections */}
         <div className="flex gap-8 justify-center">
           <div>
-            <div className="text-lg font-serif mb-4">Editor</div>
-            <div className="border border-gray-700 rounded-lg p-4">
-              <div className="relative w-52 h-80 mx-auto flex items-center justify-center overflow-hidden select-none">
+            <div className="text-lg font-serif mb-2">Editor</div>
+            <div className="border border-gray-700 rounded-lg px-1 pt-1 pb-0">
+              <div className="relative w-40 mx-auto flex items-center justify-center overflow-hidden select-none" style={{height: '230px'}}>
                 <div id="editor-chart" ref={editorContainerRef} className="cursor-pointer select-none" />
               </div>
             </div>
           </div>
 
           <div>
-            <div className="text-lg font-serif mb-4">Result</div>
-            <div className="border border-gray-700 rounded-lg p-4">
-              <div className="relative w-52 h-80 mx-auto flex items-center justify-center overflow-hidden select-none">
+            <div className="text-lg font-serif mb-2">Result</div>
+            <div className="border border-gray-700 rounded-lg px-1 pt-1 pb-0">
+              <div className="relative w-40 mx-auto flex items-center justify-center overflow-hidden select-none" style={{height: '230px'}}>
                 <div id="result-chart" className="select-none" />
               </div>
             </div>

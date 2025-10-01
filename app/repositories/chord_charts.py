@@ -48,6 +48,15 @@ class ChordChartRepository(BaseRepository):
         created_charts = []
         try:
             for i, chart_data in enumerate(chord_charts_data):
+                # Determine order - check for insertion context first (matching sheets version)
+                if 'insertionContext' in chart_data and chart_data['insertionContext']:
+                    order = chart_data['insertionContext'].get('insertOrder', i)
+                    logging.info(f"Inserting chord at order {order} from insertionContext")
+                elif 'order' in chart_data:
+                    order = chart_data['order']
+                else:
+                    order = i
+
                 # Handle three formats: Frontend format, Direct format, and Sheets format
                 if 'title' in chart_data and 'fingers' in chart_data:
                     # Frontend format (same as sheets version expected)
@@ -71,7 +80,7 @@ class ChordChartRepository(BaseRepository):
                         item_id=item_id,
                         title=chart_data.get('title', f'Chord {i+1}'),
                         chord_data=chord_data_obj,
-                        order_col=chart_data.get('order', i)
+                        order_col=order
                     )
                 elif 'title' in chart_data and 'chord_data' in chart_data:
                     # Direct format (nested chord_data)
@@ -79,7 +88,7 @@ class ChordChartRepository(BaseRepository):
                         item_id=item_id,
                         title=chart_data.get('title', f'Chord {i+1}'),
                         chord_data=chart_data.get('chord_data', {}),
-                        order_col=chart_data.get('order', i)
+                        order_col=order
                     )
                 else:
                     # Sheets format (from migration)
@@ -87,7 +96,7 @@ class ChordChartRepository(BaseRepository):
                         item_id=item_id,
                         title=chart_data.get('C', f'Chord {i+1}'),
                         chord_data=chart_data.get('D', {}),
-                        order_col=int(chart_data.get('F', i)) if chart_data.get('F') else i
+                        order_col=int(chart_data.get('F', order)) if chart_data.get('F') else order
                     )
                 
                 self.db.add(chart)
@@ -210,11 +219,14 @@ class ChordChartRepository(BaseRepository):
         # Handle both old Sheets column format (C, D, F) and new flattened frontend format
         if 'C' in sheets_data or 'D' in sheets_data or 'F' in sheets_data:
             # Old Google Sheets column format
-            return {
+            result = {
                 'title': sheets_data.get('C', ''),
                 'chord_data': sheets_data.get('D', {}),
-                'order_col': int(sheets_data.get('F', 0)) if sheets_data.get('F') else 0
             }
+            # Only set order_col if it's explicitly provided
+            if 'F' in sheets_data and sheets_data['F']:
+                result['order_col'] = int(sheets_data['F'])
+            return result
         else:
             # New flattened frontend format - build chord_data from individual properties
             title = sheets_data.get('title', '')
@@ -225,8 +237,11 @@ class ChordChartRepository(BaseRepository):
                 if key not in ['title', 'id', 'itemId', 'createdAt', 'order']:
                     chord_data[key] = value
 
-            return {
+            result = {
                 'title': title,
                 'chord_data': chord_data,
-                'order_col': int(sheets_data.get('order', 0)) if sheets_data.get('order') else 0
             }
+            # Only set order_col if it's explicitly provided (don't default to 0 on updates)
+            if 'order' in sheets_data and sheets_data['order'] is not None:
+                result['order_col'] = int(sheets_data['order'])
+            return result

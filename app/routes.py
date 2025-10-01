@@ -1903,7 +1903,7 @@ Analyze the files below:"""
 
         # Use Sonnet 4 for file type detection
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=3000,
             messages=[{
                 "role": "user",
@@ -2326,9 +2326,9 @@ Thanks for helping me extract these chord progressions! This saves me tons of ti
         app.logger.info(f"[AUTOCREATE] Message content types: {[item.get('type', 'unknown') for item in message_content]}")
         
         try:
-            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-20250514")
+            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-5-20250929")
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=8000,  # Increased for complex songs with multiple sections
                 temperature=0.1,
                 messages=[{"role": "user", "content": message_content}]

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Plus, Pencil, Trash2, GripVertical } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical, Music } from 'lucide-react';
 import { trackItemOperation } from '../utils/analytics';
 import { Card, CardHeader, CardTitle, CardContent } from '@ui/card';
 import { Button } from '@ui/button';
 import { Input } from '@ui/input';
 import { ItemEditor, BulkSongbookUpdate } from './ItemEditor';
+import ChordChartsModal from './ChordChartsModal';
 import {
   DndContext,
   closestCenter,
@@ -33,7 +34,7 @@ import {
 } from "@ui/alert-dialog";
 
 // Split out item component for better state isolation
-const SortableItem = React.memo(({ item, onEdit, onDelete }) => {
+const SortableItem = React.memo(({ item, onEdit, onDelete, onOpenChordCharts }) => {
   const {
     attributes,
     listeners,
@@ -81,6 +82,15 @@ const SortableItem = React.memo(({ item, onEdit, onDelete }) => {
         <Button
           variant="ghost"
           size="lg"
+          onClick={() => onOpenChordCharts(item['B'], item['C'])}
+          className="text-blue-400 hover:text-blue-300 hover:bg-gray-700"
+          title="View chord charts"
+        >
+          <Music className="h-5 w-5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="lg"
           onClick={handleDelete}
           className="text-red-500 hover:text-red-400 hover:bg-gray-700"
         >
@@ -98,6 +108,11 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Chord charts modal state
+  const [chordChartsModalOpen, setChordChartsModalOpen] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [selectedItemTitle, setSelectedItemTitle] = useState('');
 
   const handleDelete = async (itemId) => {
     if (isDragging) return; // Prevent delete during drag
@@ -134,6 +149,12 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
   const handleEditClick = (item) => {
     setEditingItem(item);
     setIsEditOpen(true);
+  };
+
+  const handleOpenChordCharts = (itemId, itemTitle) => {
+    setSelectedItemId(itemId);
+    setSelectedItemTitle(itemTitle);
+    setChordChartsModalOpen(true);
   };
 
   const handleSave = async () => {
@@ -252,6 +273,7 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
                     item={item}
                     onEdit={handleEditClick}
                     onDelete={handleDelete}
+                    onOpenChordCharts={handleOpenChordCharts}
                   />
                 ))}
               </div>
@@ -291,6 +313,13 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ChordChartsModal
+        isOpen={chordChartsModalOpen}
+        onClose={() => setChordChartsModalOpen(false)}
+        itemId={selectedItemId}
+        itemTitle={selectedItemTitle}
+      />
     </>
   );
 }

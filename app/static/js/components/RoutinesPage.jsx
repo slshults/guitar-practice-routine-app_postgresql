@@ -4,8 +4,9 @@ import { trackItemOperation, trackRoutineOperation } from '../utils/analytics';
 import { Button } from '@ui/button';
 import { Input } from '@ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@ui/card';
-import { Plus, Pencil, X, CheckCircle2, GripVertical } from 'lucide-react';
+import { Plus, Pencil, X, CheckCircle2, GripVertical, Music } from 'lucide-react';
 import { RoutineEditor } from './RoutineEditor';
+import ChordChartsModal from './ChordChartsModal';
 import {
   DndContext,
   closestCenter,
@@ -34,7 +35,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // Sortable item component for active routine items
-const SortableItem = React.memo(({ item, itemDetails }) => {
+const SortableItem = React.memo(({ item, itemDetails, handleOpenChordCharts }) => {
   const {
     attributes,
     listeners,
@@ -64,9 +65,19 @@ const SortableItem = React.memo(({ item, itemDetails }) => {
         </div>
         <span className="text-lg">{itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`}</span>
       </div>
-      {(item.routineEntry?.['D'] || item['D']) === 'TRUE' && (
-        <CheckCircle2 className="h-5 w-5 text-green-500" />
-      )}
+      <div className="flex items-center gap-2">
+        <Music
+          className="h-5 w-5 text-blue-400 cursor-pointer hover:text-blue-300"
+          onClick={() => handleOpenChordCharts(
+            item.routineEntry?.['B'] || item['B'],
+            itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`
+          )}
+          title="View chord charts"
+        />
+        {(item.routineEntry?.['D'] || item['D']) === 'TRUE' && (
+          <CheckCircle2 className="h-5 w-5 text-green-500" />
+        )}
+      </div>
     </div>
   );
 });
@@ -143,7 +154,12 @@ const RoutinesPage = () => {
   const [editingRoutine, setEditingRoutine] = useState(null);
   const [error, setError] = useState(null);
   const [activeRoutineItems, setActiveRoutineItems] = useState([]);
-  
+
+  // Chord charts modal state
+  const [chordChartsModalOpen, setChordChartsModalOpen] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [selectedItemTitle, setSelectedItemTitle] = useState('');
+
   // Debounce timer for routine order updates
   const routineOrderDebounceRef = useRef(null);
   const pendingRoutineOrderRef = useRef(null);
@@ -237,6 +253,12 @@ const RoutinesPage = () => {
   const handleDeleteClick = useCallback((routineId) => {
     setRoutineToDelete(routines.find(r => r.ID === routineId));
   }, [routines]);
+
+  const handleOpenChordCharts = useCallback((itemId, itemTitle) => {
+    setSelectedItemId(itemId);
+    setSelectedItemTitle(itemTitle);
+    setChordChartsModalOpen(true);
+  }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!routineToDelete) return;
@@ -670,6 +692,7 @@ const RoutinesPage = () => {
                             key={item.routineEntry?.['A'] || item['A']}
                             item={item}
                             itemDetails={item.itemDetails}
+                            handleOpenChordCharts={handleOpenChordCharts}
                           />
                         ))}
                       </div>
@@ -773,6 +796,13 @@ const RoutinesPage = () => {
         routine={editingRoutine}
         onRoutineChange={handleRoutineChange}
         items={items}
+      />
+
+      <ChordChartsModal
+        isOpen={chordChartsModalOpen}
+        onClose={() => setChordChartsModalOpen(false)}
+        itemId={selectedItemId}
+        itemTitle={selectedItemTitle}
       />
     </>
   );

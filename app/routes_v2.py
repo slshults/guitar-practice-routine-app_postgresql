@@ -1218,7 +1218,7 @@ Analyze the files below:"""
         # Use Sonnet 4 for file type detection
         llm_start_time = time.time()
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=3000,
             messages=[{
                 "role": "user",
@@ -1230,7 +1230,7 @@ Analyze the files below:"""
         # Track LLM Analytics for file type detection
         from app.utils.llm_analytics import llm_analytics
         llm_analytics.track_generation(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             input_messages=[{"role": "user", "content": "File type detection for guitar content"}],
             output_choices=[{"message": {"content": response.content[0].text}}],
             usage={
@@ -1432,7 +1432,7 @@ If you can't determine sections, use "Main" as the section name.""",
         llm_start_time = time.time()
         try:
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=8000,
                 messages=[{
                     "role": "user",
@@ -1465,7 +1465,7 @@ If you can't determine sections, use "Main" as the section name.""",
 
             # Track the LLM generation with PostHog LLM Analytics
             generation_id = track_llm_generation(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 input_messages=[{
                     "role": "user",
                     "content": "Extract chord names from uploaded guitar files"  # Simplified for privacy
@@ -1494,7 +1494,7 @@ If you can't determine sections, use "Main" as the section name.""",
 
             # Track failed generation
             generation_id = track_llm_generation(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 input_messages=[{"role": "user", "content": "Extract chord names from uploaded guitar files"}],
                 output_choices=[],
                 latency_seconds=llm_latency / 1000,  # Will be converted back to ms in track_llm_generation
@@ -2229,9 +2229,9 @@ Thanks for helping me extract chord progressions from this voice-to-text transcr
         app.logger.info(f"[AUTOCREATE] Message content types: {[item.get('type', 'unknown') for item in message_content]}")
 
         try:
-            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-20250514")
+            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-5-20250929")
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=8000,  # Increased for complex songs with multiple sections
                 temperature=0.1,
                 messages=[{"role": "user", "content": message_content}]
@@ -2472,9 +2472,9 @@ Thanks for helping me extract these chord progressions! This saves me tons of ti
         app.logger.info(f"[AUTOCREATE] Message content types: {[item.get('type', 'unknown') for item in message_content]}")
 
         try:
-            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-20250514")
+            app.logger.info(f"[AUTOCREATE] Starting Anthropic API call to claude-sonnet-4-5-20250929")
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=8000,  # Increased for complex songs with multiple sections
                 temperature=0.1,
                 messages=[{"role": "user", "content": message_content}]
@@ -2950,7 +2950,7 @@ CORRUPTED - if there are significant gibberish patterns that indicate unreliable
 **Important:** Be conservative - if you see clear gibberish artifacts, mark as CORRUPTED even if some parts look good."""
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=100,  # Short response needed
             temperature=0.1,
             messages=[{"role": "user", "content": assessment_prompt}]

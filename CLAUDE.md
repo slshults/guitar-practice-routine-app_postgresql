@@ -421,6 +421,27 @@ For debugging during development, you can access server logs via:
 
 **Log Rotation**: Logs automatically rotate at 50MB with 2 backup files (100MB total max)
 
+### Frontend Compilation Debugging
+**Critical Pattern**: When React component changes aren't taking effect, check if the frontend bundle needs rebuilding.
+
+**Symptoms**:
+- API calls not happening despite correct source code
+- Old functionality still executing after code removal
+- Log messages showing old code paths (e.g., `[MANUAL]` instead of `[AUTOCREATE]`)
+
+**Root Cause**: Vite's development watcher may not always catch changes, leaving old compiled code in `app/static/js/main.js`
+
+**Solution**: Force rebuild frontend assets
+```bash
+npm run build  # Force recompilation of React components
+```
+
+**Debugging Pattern**: Compare log prefixes to identify which code path is executing:
+- `[MANUAL]` = Old local parsing code still running
+- `[AUTOCREATE]` = New Sonnet API code correctly executing
+
+**Prevention**: Always verify that source code changes are reflected in the compiled bundle when debugging API integration issues.
+
 ## Performance Patterns & Optimizations
 
 ### Google Sheets API Rate Limiting (60 requests/minute/user)
