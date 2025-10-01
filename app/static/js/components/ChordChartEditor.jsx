@@ -143,8 +143,8 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
         if (matches.length === 1) {
           chordToUse = matches[0];
         } else {
-          // Multiple matches - use the most recent one (highest order/ID)
-          // Sort by order (or ID if order is the same) and take the last one
+          // Multiple matches - use the first one (earliest in order/ID)
+          // Sort by order (or ID if order is the same) and take the first one
           matches.sort((a, b) => {
             const orderA = parseInt(a.order) || 0;
             const orderB = parseInt(b.order) || 0;
@@ -152,7 +152,7 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
             // If order is the same, use ID as tiebreaker
             return (parseInt(a.id) || 0) - (parseInt(b.id) || 0);
           });
-          chordToUse = matches[matches.length - 1]; // Take the last (most recent)
+          chordToUse = matches[0]; // Take the first (earliest)
         }
       }
       
