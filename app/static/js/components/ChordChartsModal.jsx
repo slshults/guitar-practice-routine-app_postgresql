@@ -84,8 +84,8 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
           frets: actualChartData.numFrets || 5,
           position: actualChartData.startingFret || 1,
           tuning: [], // Hide tuning labels in the small display
-          width: 220,             // Match editor dimensions
-          height: 310,            // Match editor dimensions
+          width: 160,             // Compact width matching container
+          height: 220,            // Compact height matching container
           fretSize: 1.2,          // Match editor settings
           fingerSize: 0.75,       // Larger finger size for text visibility (match editor)
           sidePadding: 0.2,       // Match editor settings
@@ -135,8 +135,8 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
           if (svg) {
             svg.style.width = '100%';
             svg.style.height = '100%';
-            svg.style.maxWidth = '180px';
-            svg.style.maxHeight = '192px';
+            svg.style.maxWidth = '160px';  // Match container width w-40
+            svg.style.maxHeight = '224px'; // Match container height h-56
             svg.style.position = 'relative';
             svg.style.zIndex = '1';
           }
@@ -671,72 +671,110 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
   const handleSaveChordChart = async (itemId, chartData) => {
     try {
-      if (editingChordId) {
-        // Update existing chord
-        const response = await fetch(`/api/chord-charts/${editingChordId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: chartData.title,
-            chord_data: chartData.chord_data
-          }),
-        });
+      const isUpdate = !!editingChordId;
 
-        if (response.ok) {
-          const updatedChart = await response.json();
+      // Build chart data with section metadata
+      const chartDataWithSection = {
+        title: chartData.title,
+        chord_data: chartData.chord_data
+      };
 
-          // Update local state
-          setChordCharts(prev => ({
-            ...prev,
-            [itemId]: (prev[itemId] || []).map(chart =>
-              chart.id === editingChordId ? updatedChart : chart
-            )
-          }));
+      // Determine target section for new chords or insertions
+      if (!isUpdate || insertionContext) {
+        const itemSections = chordSections[itemId] || [];
+        let targetSection;
 
-          // Rebuild sections
-          const updatedCharts = (chordCharts[itemId] || []).map(chart =>
+        if (insertionContext) {
+          // Use the insertion context section
+          targetSection = {
+            id: insertionContext.sectionId,
+            label: insertionContext.sectionLabel,
+            repeatCount: insertionContext.sectionRepeatCount
+          };
+        } else if (itemSections.length === 0) {
+          // No sections exist, create default
+          targetSection = {
+            id: 'section-1',
+            label: 'Verse',
+            repeatCount: ''
+          };
+        } else {
+          // Use the last section (original behavior for "Add New Chord")
+          targetSection = itemSections[itemSections.length - 1];
+        }
+
+        // Add section metadata to chart data
+        chartDataWithSection.sectionId = targetSection.id;
+        chartDataWithSection.sectionLabel = targetSection.label;
+        chartDataWithSection.sectionRepeatCount = targetSection.repeatCount;
+      }
+
+      // Handle line break after this chord - always set the value explicitly
+      chartDataWithSection.hasLineBreakAfter = chartData.startOnNewLine || false;
+      serverDebug('Setting line break after chord', {
+        title: chartDataWithSection.title,
+        hasLineBreakAfter: chartDataWithSection.hasLineBreakAfter
+      });
+
+      serverDebug('Chord data with section metadata', { chartDataWithSection });
+
+      const url = isUpdate
+        ? `/api/chord-charts/${editingChordId}`
+        : `/api/items/${itemId}/chord-charts`;
+      const method = isUpdate ? 'PUT' : 'POST';
+
+      serverDebug(`${isUpdate ? 'Updating' : 'Creating'} chord chart`, { method, url });
+
+      const response = await fetch(url, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chartDataWithSection)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save chord chart: ${response.statusText}`);
+      }
+
+      if (isUpdate) {
+        const updatedChart = await response.json();
+
+        // Update local state
+        setChordCharts(prev => ({
+          ...prev,
+          [itemId]: (prev[itemId] || []).map(chart =>
             chart.id === editingChordId ? updatedChart : chart
-          );
-          setChordSections(prev => ({
-            ...prev,
-            [itemId]: buildSectionsFromCharts(updatedCharts)
-          }));
+          )
+        }));
 
-          trackChordChartEvent('chord_chart_updated', { itemId });
-        }
+        // Rebuild sections
+        const updatedCharts = (chordCharts[itemId] || []).map(chart =>
+          chart.id === editingChordId ? updatedChart : chart
+        );
+        setChordSections(prev => ({
+          ...prev,
+          [itemId]: buildSectionsFromCharts(updatedCharts)
+        }));
+
+        trackChordChartEvent('chord_chart_updated', { itemId });
       } else {
-        // Create new chord
-        const response = await fetch(`/api/items/${itemId}/chord-charts`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            title: chartData.title,
-            chord_data: chartData.chord_data
-          }),
-        });
+        const newChart = await response.json();
 
-        if (response.ok) {
-          const newChart = await response.json();
+        // Add to local state
+        setChordCharts(prev => ({
+          ...prev,
+          [itemId]: [...(prev[itemId] || []), newChart]
+        }));
 
-          // Add to local state
-          setChordCharts(prev => ({
-            ...prev,
-            [itemId]: [...(prev[itemId] || []), newChart]
-          }));
+        // Rebuild sections
+        const updatedCharts = [...(chordCharts[itemId] || []), newChart];
+        setChordSections(prev => ({
+          ...prev,
+          [itemId]: buildSectionsFromCharts(updatedCharts)
+        }));
 
-          // Rebuild sections
-          const updatedCharts = [...(chordCharts[itemId] || []), newChart];
-          setChordSections(prev => ({
-            ...prev,
-            [itemId]: buildSectionsFromCharts(updatedCharts)
-          }));
-
-          trackChordChartEvent('chord_chart_created', { itemId });
-        }
+        trackChordChartEvent('chord_chart_created', { itemId });
       }
 
       // Close editor

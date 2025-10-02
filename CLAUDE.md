@@ -51,6 +51,30 @@ This is IMPORTANT for managing rate-limiting and billing efficiency. **Sonnet 4 
 3. **Pattern References**: Point Sonnet to existing examples in the codebase to follow
 4. **Success Criteria**: Define what "done" looks like for the delegated task
 
+### Claude 4 Prompt Engineering Best Practices
+
+#### Multi-Context Window Workflows
+As you approach your token budget limit, save your current progress and state to memory before the context window refreshes. Use as much of the remaining context window as possible before saving, and let me know how much of the context window is remaining at that time.
+
+#### State Management Best Practices
+- After completing a task that involves tool use, provide a quick summary of the work you've done
+- After receiving tool results, carefully reflect on their quality and determine optimal next steps before proceeding. Use your thinking to plan and iterate based on this new information, and then take the best next action
+
+#### Parallel Tool Execution
+If you intend to call multiple tools and there are no dependencies between the tool calls, make all of the independent tool calls in parallel. Prioritize calling tools simultaneously whenever the actions can be done in parallel rather than sequentially. For example, when reading 3 files, run 3 tool calls in parallel to read all 3 files into context at the same time. Maximize use of parallel tool calls where possible to increase speed and efficiency. However, if some tool calls depend on previous calls to inform dependent values like the parameters, do NOT call these tools in parallel and instead call them sequentially. Never use placeholders or guess missing parameters in tool calls.
+
+#### Code Investigation Requirements
+Never speculate about code you have not opened. If the user references a specific file, you MUST read the file before answering. Make sure to investigate and read relevant files BEFORE answering questions about the codebase. Never make any claims about code before investigating unless you are certain of the correct answer - give grounded and hallucination-free answers.
+
+#### Temporary File Cleanup
+If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task.
+
+#### Avoid Test-Focused Development
+Do not focus solely on passing tests or hard-code solutions just to make tests pass. Prioritize understanding the underlying requirements and implementing robust, generalizable solutions that address the actual problem rather than just satisfying test assertions.
+
+#### Failed Attempt Cleanup
+If we try something, and testing reveals it didn't work out and we need to change tact, please cleanup / revert the previous failed changes before moving on to trying a different approach.
+
 ### Debuggging:
 
 When you hand off to Opus 4.1 for troubleshooting, please remind them to:
@@ -98,6 +122,197 @@ npm run watch           # Watch mode for development
 ```bash
 python run.py           # Start Flask server only (port 5000)
 ```
+
+### Test Content for Playwright MCP Testing
+
+#### File Upload Testing
+When testing file upload features with Playwright, use these sample files (translate Windows paths to WSL2 paths):
+
+- **Lyrics with chord names**: `D:\Users\Steven\Documents\Guitar\Songbook\AngelFromMontgomery\angel_from_montgomery-chords.pdf`
+  - WSL2 path: `/mnt/d/Users/Steven/Documents/Guitar/Songbook/AngelFromMontgomery/angel_from_montgomery-chords.pdf`
+
+- **Chord charts (standard tuning)**: `D:\Users\Steven\Documents\Guitar\Songbook\DontDreamItsOver\DontDreamItsOver-ChordCharts.pdf`
+  - WSL2 path: `/mnt/d/Users/Steven/Documents/Guitar/Songbook/DontDreamItsOver/DontDreamItsOver-ChordCharts.pdf`
+
+- **Chord charts (alternate tuning)**: `D:\Users\Steven\Documents\Guitar\Songbook\AlmostCutMyHair\AlmostCutMyHair-Chords.pdf`
+  - WSL2 path: `/mnt/d/Users/Steven/Documents/Guitar/Songbook/AlmostCutMyHair/AlmostCutMyHair-Chords.pdf`
+
+- **Mixed content (charts + lyrics)**: `D:\Users\Steven\Documents\Guitar\Songbook\BackInBlack\BackInBlack-Chords.pdf`
+  - WSL2 path: `/mnt/d/Users/Steven/Documents/Guitar/Songbook/BackInBlack/BackInBlack-Chords.pdf`
+  - Use this to test prompting user to choose which content type to process
+
+#### YouTube Transcript Testing
+For testing YouTube transcript generation:
+- URL: `https://youtu.be/-IFmtOHecOg?si=KGJiRR7gV8u-hx_D`
+
+#### Manual Entry Testing
+For testing manual chord chart entry:
+```
+Verse
+Ebsus2 Csus2 Ab G Gsus4
+Chorus
+Ab Bm Ebsus2 Cmin
+```
+
+### Playwright MCP Testing Guide
+
+**Testing Philosophy**: When adding new functionality or fixing bugs, use Playwright MCP to test changes. Test after each testable change, because it's easier to fix bugs as we go than it is to find and fix bugs after a large number of changes.
+
+#### Environment Setup
+- **WSLg**: WSL2 includes WSLg (WSL GUI support) which allows Chrome to display in a GUI window during testing
+- **Browser Installation**: Run `npx playwright install chrome` to install Chrome browser binaries
+- **System Dependencies**: Run `npx playwright install-deps` to install required system packages
+- **Approval Configuration**:
+  - Add `"mcp__playwright__*"` to the `permissions.allow` array in `.claude/settings.local.json` (project-level)
+  - Alternatively, add to `~/.claude/settings.json` (user-level, applies to all projects)
+  - Format: `"permissions": { "allow": ["mcp__playwright__*"], "deny": [] }`
+  - **IMPORTANT**: Use Claude Code in **terminal mode** (within VS Code) instead of the native extension
+  - In terminal mode, click "Always allow this tool" on first approval - subsequent actions run without prompts
+  - **Note**: As of 10/02/2025, the VS Code native extension requires per-action approval despite configuration. Terminal mode is the recommended workflow for automated testing.
+
+#### Navigation Patterns
+
+**Opening the App:**
+1. Navigate to `http://localhost:5000`
+2. Take snapshot to see current page state
+3. Look for "Practice" link in navigation to access practice page
+
+**Accessing Practice Items:**
+1. On Practice page, items are collapsed by default
+2. Look for expand chevrons (▸) next to item titles
+3. Click chevron refs to expand items and reveal chord chart sections
+4. Take screenshots to verify expanded state
+
+**Collapsible Sections:**
+- Items have multiple collapsible sections (Notes, Description, Chord Charts)
+- Each section has its own expand/collapse button
+- Use `browser_snapshot` to identify section refs before clicking
+
+#### File Upload Testing
+
+**Workflow:**
+1. Expand a practice item that doesn't have chord charts yet
+2. Look for "Autocreate from Files" or similar upload button
+3. Click to open file upload dialog
+4. Use `browser_file_upload` tool with WSL2 paths (e.g., `/mnt/d/Users/Steven/...`)
+5. Wait for processing (may take 10-30 seconds depending on file complexity)
+6. Take screenshot to verify chord charts were created
+
+**Common Issues:**
+- File upload requires exact WSL2 paths, not Windows paths
+- Processing time varies by content type (chord diagrams take longer than lyrics)
+- Check browser console for processing status messages
+
+#### Manual Chord Entry Testing
+
+**Workflow:**
+1. Expand practice item's chord chart section
+2. Look for "Add Chord Manually" or "Show me" button to open editor
+3. Enter section label (e.g., "Verse", "Chorus")
+4. Type chord progression in text area
+5. Click "Create Chord Charts" or similar button
+6. Wait for AI processing (~5-10 seconds)
+7. Verify chord charts appear in the section
+
+**Test Input Format:**
+```
+Verse
+Ebsus2 Csus2 Ab G Gsus4
+Chorus
+Ab Bm Ebsus2 Cmin
+```
+
+#### Element Selection Tips
+
+**Common Ref Patterns:**
+- Buttons: Look for `button` elements with accessible names
+- Expand/collapse: Look for chevron symbols (▸, ▾) or expand icons
+- Sections: Look for headings like "Chord Charts", "Notes", "Description"
+- Forms: Look for `textbox`, `combobox`, `button` roles
+
+**Navigation Strategy:**
+1. Always take snapshot first to see available elements
+2. Use accessible names and roles for reliable element selection
+3. Verify action results with screenshots
+4. Check console logs for API responses and errors
+
+#### Console Monitoring
+
+**Key Log Patterns:**
+- `[AUTOCREATE]`: Processing file uploads via AI
+- `[MANUAL]`: Processing manual chord entry
+- API responses show success/failure of backend operations
+- Error messages help diagnose issues
+
+**Accessing Console:**
+```
+# View console messages
+mcp__playwright__browser_console_messages
+
+# View only errors
+mcp__playwright__browser_console_messages(onlyErrors=true)
+```
+
+#### Screenshot Best Practices
+
+**When to Capture:**
+- After navigation to verify correct page loaded
+- Before clicking elements to document UI state
+- After operations complete to verify results
+- When debugging to understand what went wrong
+
+**Screenshot Tools:**
+- `browser_take_screenshot`: Captures current viewport or specific elements
+- `browser_snapshot`: Better for identifying interactive elements (includes accessibility tree)
+
+#### Common Testing Scenarios
+
+**Scenario 1: Test File Upload End-to-End**
+1. Navigate to Practice page
+2. Expand an item without chord charts
+3. Click autocreate button
+4. Upload test PDF file
+5. Wait for processing
+6. Verify chord charts appear
+7. Verify tuning and section labels are correct
+
+**Scenario 2: Test Manual Entry Workflow**
+1. Navigate to Practice page
+2. Expand item chord chart section
+3. Open manual entry editor
+4. Enter section + chord progression
+5. Submit for processing
+6. Verify AI-generated chord charts match input
+
+**Scenario 3: Replace Existing Chord Charts**
+1. Navigate to item that already has charts
+2. Click "Replace" button
+3. Choose file upload or manual entry
+4. Complete workflow
+5. Verify old charts replaced with new ones
+
+#### Troubleshooting
+
+**UI Element Not Found:**
+- Take fresh snapshot to see current state
+- Check if section needs to be expanded first
+- Verify page loaded completely (check for loading spinners)
+
+**File Upload Fails:**
+- Verify WSL2 path format (`/mnt/d/...` not `D:\...`)
+- Check file exists at specified path
+- Ensure ANTHROPIC_API_KEY is set in backend `.env`
+
+**Chord Charts Don't Appear:**
+- Check console logs for API errors
+- Verify processing completed (no loading state)
+- Take screenshot to see if error message displayed
+- Check browser network requests for failed API calls
+
+**Approval Prompts Slow Down Testing:**
+- As of 10/02/2025, per-action approval may still be required
+- Future versions may support bulk approval
+- Be patient and approve each action when prompted
 
 ## Architecture
 
@@ -152,11 +367,7 @@ The `gpr.sh` script runs:
 3. Python file watcher for backend changes
 
 ### Sticky Header Implementation
-The app uses a fixed header system for persistent navigation:
-- **Fixed positioning**: `fixed top-0 left-0 right-0 z-50` keeps header visible during scroll
-- **Dynamic height calculation**: JavaScript measures actual header height and adjusts content padding
-- **Responsive wrapping**: Navigation uses `flex-wrap` to stack buttons on mobile screens
-- **Critical issue**: Large Tailwind padding classes (`pt-28`, `pt-36`) may not compile - use inline styles for reliable padding: `style={{paddingTop: '160px'}}`
+- **Critical**: Large Tailwind padding classes (`pt-28`, `pt-36`) may not compile - use inline styles for reliable padding: `style={{paddingTop: '160px'}}`
 
 ### Authentication Flow
 - Legacy: OAuth2 flow for Google Sheets access (being removed)
@@ -286,31 +497,12 @@ Here's a map of the columns for our Items sheet and routine sheets.  This is wha
 
 ## SVGuitar Chord Chart Sizing
 
-  The chord chart editor uses a three-part sizing system that must be kept
-  synchronized:
+**Critical**: Three-part sizing system must stay synchronized or charts will be clipped/distorted:
+1. **SVGuitar Config** (`defaultChartConfig` in ChordChartEditor.jsx): width/height (Current: 220x310)
+2. **CSS Containers**: Chart containers `w-52 h-80` (208px x 320px)
+3. **Post-Processing** (`updateCharts`): maxWidth/maxHeight (208px x 320px)
 
-  ### To Adjust Chart Size:
-  1. **SVGuitar Config** (`defaultChartConfig` in ChordChartEditor.jsx):
-     - `width` and `height` - Sets the base SVG dimensions
-     - Current: 220 x 310
-
-  2. **CSS Containers** (both Editor and Result sections):
-     - Chart containers: `w-52 h-80` (208px x 320px)
-     - Tuning letter containers: `w-52` (to match chart width)
-
-  3. **Post-Processing Constraints** (`updateCharts` function):
-     - `maxWidth` and `maxHeight` - Limits SVG size to fit containers
-     - Current: 208px x 320px (matches CSS container dimensions)
-
-  ### Example Size Change:
-  To make charts larger, update all three in proportion:
-  - SVGuitar config: 220x310 → 240x340
-  - CSS containers: w-52 h-80 → w-56 h-84
-  - Post-processing: 208x320 → 224x336
-
-  **Note**: All three must be synchronized or charts will be
-  clipped/distorted. The CSS container size should be slightly smaller than
-  SVGuitar config to allow proper scaling.
+**To resize**: Update all three proportionally. CSS container should be slightly smaller than SVGuitar config for proper scaling.
 
 ## Chord Chart System (NEW)
 
@@ -338,78 +530,16 @@ The autocreate chord charts feature uses a **3-path architecture** for optimal p
 - **Complete file processing**: Reads entire file, doesn't stop after finding chord charts
 - **Tuning awareness**: CommonChords for standard, direct patterns for alternate tunings
 
-### Common Regression Fixes
+### Chord Chart Database Schema (PostgreSQL)
+**ChordCharts Table** (mirrors Google Sheets structure for compatibility):
+- ChordID, ItemID (string), Title, ChordData (JSON with section metadata), CreatedAt, Order
+- Section metadata in JSON: sectionId, sectionLabel (e.g., "Verse"), sectionRepeatCount (e.g., "x4")
 
-#### Chord Chart Updates Not Visible Until Page Refresh
-**Symptom**: Changes to chord charts (editing, line breaks, etc.) aren't reflected in the UI until the page is refreshed.
+**Key Components**: `ChordChartEditor.jsx`, `PracticePage.jsx`, API endpoints in `routes.py`
 
-**Root Cause**: This happens when the comma-separated ItemID feature breaks the `update_chord_chart` function in `sheets.py`. The function tries to parse corrupted ItemID data like `'71, 101'` as a single integer.
+**Features**: Real-time editing with 500ms debounce, automatic section grouping, 4-per-row grid display
 
-**Fix**: The `update_chord_chart` function in `sheets.py` now handles comma-separated ItemIDs properly:
-```python
-# Handle comma-separated ItemIDs properly - preserve all existing ItemIDs
-item_id_raw = str(chart_to_update['B']).strip()
-
-# For the return value, we need a single ItemID - use the first one
-if ',' in item_id_raw:
-    # Comma-separated ItemIDs - use the first one for the return value
-    first_item_id = item_id_raw.split(',')[0].strip()
-else:
-    first_item_id = item_id_raw
-```
-
-**Key Points**:
-- Chord charts can belong to multiple items via comma-separated ItemIDs in column B
-- When updating a chord chart, preserve all existing ItemIDs 
-- For return values, use the first ItemID from the comma-separated list
-- The `get_chord_charts_for_item` function correctly handles comma-separated ItemIDs
-
-### Database Schema
-**ChordCharts Sheet:**
-- Column A: ChordID (unique identifier)
-- Column B: ItemID (references Items sheet Column A)
-- Column C: Title (chord name like "C Major", "Am7", etc.)
-- Column D: ChordData (JSON with fingers, barres, tuning, capo, **section metadata**)
-- Column E: CreatedAt (timestamp)
-- Column F: Order (display order within an item)
-
-**Section Metadata in ChordData JSON:**
-- `sectionId`: Unique section identifier (e.g., "section-1750638363428")
-- `sectionLabel`: User-defined section name (e.g., "Verse", "Chorus")
-- `sectionRepeatCount`: Repeat notation (e.g., "x4", "x2")
-
-### Architecture
-- **Backend**: Full CRUD functions in `sheets.py` including `update_chord_chart()` for section persistence
-- **API**: RESTful endpoints for creating, reading, updating, deleting chord charts
-- **Frontend**: Interactive chord chart editor with real-time section management
-- **Display**: Organized by labeled sections with repeat counts, 4-per-row grid within sections
-- **Travel-friendly**: Clean separation allows browsing chord charts directly in Google Sheets
-
-### Key Components
-- `ChordChartEditor.jsx`: Interactive chord diagram editor with click detection
-- `PracticePage.jsx`: Section-aware chord chart display with debounced updates
-- Chord chart API endpoints in `routes.py` including `PUT /api/chord-charts/<id>`
-- ChordCharts CRUD functions in `sheets.py` including `update_chord_chart()`
-
-### Section System Features
-- **Real-time editing**: Section labels and repeat counts update immediately in UI
-- **Debounced persistence**: Backend updates use 500ms debounce to prevent keystroke conflicts
-- **Automatic grouping**: Chord charts automatically grouped by section metadata
-- **Persistent sections**: Section data stored in each chord's JSON and survives page refreshes
-
-### Data Flow
-1. User creates chord in interactive editor
-2. Clicks "Add Chord Chart" to save via API
-3. Chart data stored as JSON in ChordCharts sheet
-4. Charts loaded and displayed in 4-per-row grid during practice
-5. SVGuitar renders saved charts for visual display
-
-### Usage
-- Available in practice mode for each song/item
-- Toggle "Add New Chord" to open interactive editor
-- Click on fretboard to place finger positions
-- Enter chord name and save to persist in database
-- Saved charts appear in collapsible "Chord Charts" section
+**Note**: Database structure based on Google Sheets schema - refer to sheets version in `../gpr` for debugging reference
 
 ## Development Tools
 
@@ -443,19 +573,6 @@ npm run build  # Force recompilation of React components
 **Prevention**: Always verify that source code changes are reflected in the compiled bundle when debugging API integration issues.
 
 ## Performance Patterns & Optimizations
-
-### Google Sheets API Rate Limiting (60 requests/minute/user)
-**Critical**: Always use batch operations to minimize API calls, especially for chord chart operations.
-
-#### Batch Operations Pattern:
-- **Bad**: Individual `add_chord_chart()` calls for each chord (20+ API calls)
-- **Good**: `batch_add_chord_charts()` with all chords at once (3 total API calls)
-- **Implementation**: Use `batch_add_chord_charts(item_id, chord_charts_data)` in `sheets.py`
-
-#### CommonChords Performance:
-- **Fixed Range**: `get_common_chords_efficiently()` uses fixed range `A2:F12710` (12,709 chord records)
-- **No Dynamic Detection**: Avoids extra API calls to determine data range
-- **Pre-loading**: Load CommonChords once at start of autocreate, reuse for all chord lookups
 
 ### Frontend State Management
 
@@ -543,81 +660,6 @@ if ocr_result and should_use_ocr_result(ocr_result, minimum_chords=2):
 - **Detection Logic**: System checks file categories and selects appropriate model
 - **Rate Limit Management**: Helps us stay within Opus usage limits while getting best results
 
-#### Visual Analysis Debugging Process (NEW)
-**Common Issues with Reference Chord Diagrams:**
-- **Conflicting prompt instructions** can confuse visual analysis models
-- **Prompt structure matters**: Visual analysis instructions must come first, before tablature guidance
-- **Chord name matching**: Remove suffixes like "(capoOn2)" for proper matching between files
-- **Debug output**: Always require detailed visual descriptions in API responses
-- **Validation steps**: Force models to re-examine and verify fret counting
-
-**Key Debugging Steps:**
-1. Check logs for extracted patterns vs expected patterns
-2. Verify chord name matching logic is working
-3. Ensure song structure is preserved from tablature
-4. Validate visual analysis descriptions make sense
-
-## Critical PostgreSQL Migration Bug (SOLVED)
-
-### ItemID Mapping Issue in Routine Items
-**Symptom**: Chord charts showing up on wrong songs despite correct titles (e.g., "Should I Stay or Should I Go" title but "My City Was Gone" chords)
-
-**Root Cause**: The `_routine_item_to_sheets_format()` method in `app/repositories/routines.py` was returning database primary keys instead of Google Sheets ItemIDs in Column B.
-
-**The Problem**: 
-- Database ID 106 → ItemID "107" → "Should I Stay or Should I Go"
-- But routine was returning Column B="106" instead of Column B="107"
-- Frontend requests chord charts for ItemID "106" → gets "My City Was Gone" chords
-
-**The Fix**: Modified `_routine_item_to_sheets_format()` to query the Items table and return the actual `item.item_id` string instead of the `routine_item.item_id` integer:
-
-```python
-# Get the actual ItemID string from the Items table
-item = self.db.query(Item).filter(Item.id == routine_item.item_id).first()
-item_id_str = item.item_id if item and item.item_id else str(routine_item.item_id)
-
-return {
-    'A': str(routine_item.id),  # RoutineItem ID
-    'B': item_id_str,          # Google Sheets ItemID (e.g., "107", not 106)
-    'C': str(routine_item.order),  # Order
-    'D': 'TRUE' if routine_item.completed else 'FALSE'  # Completed
-}
-```
-
-**Critical**: Always use Google Sheets ItemIDs for frontend communication, never database primary keys.
-
-## PostgreSQL Migration Debugging Patterns
-
-### API Endpoint Completeness Check
-When implementing API endpoints, always verify BOTH directions of batch operations exist:
-- **`/api/chord-charts/batch`** (POST) - GET chord charts for multiple items
-- **`/api/chord-charts/batch-delete`** (POST) - DELETE multiple chord charts by IDs
-
-**Common Issue**: Frontend may call both endpoints for different purposes. Check sheets version for complete endpoint list.
-
-### Routes File Architecture (CRITICAL)
-**Important Discovery**: The app uses `routes_v2.py` as the main routes file (`app/__init__.py` imports `routes_v2` as `routes`).
-
-- **`routes.py`**: Legacy file with some endpoints that aren't loaded by the app
-- **`routes_v2.py`**: Active routes file that the app actually uses
-- **Migration Issue**: Some endpoints exist in `routes.py` but need to be ported to `routes_v2.py` to be accessible
-
-**Fix Pattern**: When "missing" endpoints are reported, check if they exist in `routes.py` and need porting to `routes_v2.py`.
-
-### Complex Debugging with Task Tool
-For multi-system issues (missing endpoints, data format problems, etc.), use Task tool with general-purpose agent:
-- Provide specific file paths and function names
-- Include "don't re-engineer" reminder and sheets reference link
-- Request detailed technical analysis with fix recommendations
-- Very effective for systematic debugging
-
-### Migration Progress Reference
-See `API_MISMATCH_CHECKLIST.md` in project root for comprehensive comparison between PostgreSQL and sheets versions:
-- Complete endpoint inventory
-- Priority-based action items  
-- Current implementation status
-- Should be updated as features are implemented
-
 ## PostgreSQL Migration Troubleshooting Patterns
 
 ### Common ID Mismatch Issues
@@ -667,119 +709,23 @@ IMPORTANT:
 ## Cross-Platform Development Patterns
 
 ### WSL Detection and Path Handling
-**Critical Pattern**: Detect WSL environment for proper Windows path handling in Linux subsystem.
-
-```python
-# Detect WSL environment
-def is_wsl():
-    try:
-        with open('/proc/version', 'r') as f:
-            return 'microsoft' in f.read().lower()
-    except FileNotFoundError:
-        return False
-
-# Platform-specific folder opening
-if system == 'windows' or is_wsl:
-    windows_path = folder_path.replace('/', '\\')
-    try:
-        subprocess.run(['explorer.exe', windows_path], check=True)
-    except subprocess.CalledProcessError:
-        pass  # explorer.exe often returns non-zero even when successful
-```
+- Detect WSL: Check `/proc/version` for 'microsoft'
+- Path conversion: Use `explorer.exe` with Windows-style paths (`folder_path.replace('/', '\\')`)
+- Note: `explorer.exe` often returns non-zero even when successful
 
 ### Cross-Platform Feature Detection
-Use platform detection to conditionally show/hide features:
-
-```javascript
-// Frontend platform detection
-function supportsFolderOpening() {
-    return !isMobile();
-}
-
-function isMobile() {
-    const userAgent = navigator.userAgent.toLowerCase();
-    return /android|iphone|ipad|ipod/.test(userAgent);
-}
-
-// Conditional rendering
-{supportsFolderOpening() && (
-    <FolderOpeningFeature />
-)}
-```
+- Mobile detection: Check userAgent for `/android|iphone|ipad|ipod/`
+- Conditionally render features based on platform capabilities
 
 ## Light Mode Implementation Pattern
-
-### Comprehensive CSS Override Strategy
-**Critical Pattern**: Use specific selectors with `!important` flags to override Tailwind defaults.
-
-```css
-/* CSS Variables for light mode */
-.light-mode {
-  --background: 0 0% 100%;
-  --foreground: 222.2 47.4% 11.2%;
-  /* ... other variables */
-}
-
-/* Body-specific overrides */
-body.light-mode {
-  background-color: #ffffff !important;
-  color: #000000 !important;
-}
-
-/* Component-specific overrides */
-.light-mode .bg-gray-700 { background-color: #f3f4f6 !important; }
-.light-mode .text-white { color: #000000 !important; }
-
-/* SVG/Chord Chart specific overrides */
-.light-mode svg { background: #ffffff !important; }
-.light-mode svg path, .light-mode svg line { stroke: #000000 !important; }
-.light-mode svg circle { fill: #000000 !important; }
-.light-mode svg text { fill: #000000 !important; }
-```
-
-### JavaScript Theme Toggle Pattern
-```javascript
-function toggleTheme() {
-  const isCurrentlyLight = document.body.classList.contains('light-mode');
-
-  if (isCurrentlyLight) {
-    document.body.classList.remove('light-mode');
-    localStorage.setItem('lightMode', 'false');
-  } else {
-    document.body.classList.add('light-mode');
-    localStorage.setItem('lightMode', 'true');
-  }
-
-  updateToggleDisplay(!isCurrentlyLight);
-}
-```
-
-**Key Points**:
-- Use `localStorage` for theme persistence
-- Apply theme class to `<body>` element for global scope
-- Include specific overrides for SVG elements (chord charts)
-- Use `!important` flags to ensure overrides work against Tailwind utilities
+- Use `.light-mode` class on `<body>` element
+- CSS: Specific selectors with `!important` flags to override Tailwind defaults
+- Include SVG overrides for chord charts (background, stroke, fill, text)
+- JS: Toggle class, persist with `localStorage`
 
 ## UI/UX Development Patterns
-
-### Responsive Button Pairs
-For button pairs that need to stack on mobile but stay side-by-side on desktop:
-```jsx
-<div className="flex flex-col sm:flex-row gap-2 mb-4 w-full">
-  <Button className="w-full sm:w-1/2">Button 1</Button>
-  <Button className="w-full sm:w-1/2">Button 2</Button>
-</div>
-```
-
-### Browser Navigation Enhancement
-To add back/forward button support to SPA navigation, enhance NavigationContext with URL hash sync:
-- Use `window.location.hash` for page state
-- Add `popstate` listener for back/forward detection
-- Update URL with `window.history.pushState()` on navigation changes
-- Initialize from URL hash on page load
-
-### Performance Anti-Patterns
-**Avoid**: Including mutable objects like `chordCharts` in useMemo dependencies - causes infinite re-render loops
-**Fix**: Separate mutable object filtering from memoized logic, or use more stable dependencies
+- **Responsive buttons**: `flex flex-col sm:flex-row` for mobile stacking
+- **Browser navigation**: URL hash sync with `popstate` listener for back/forward support
+- **Performance**: Avoid mutable objects in useMemo dependencies (causes re-render loops)
 
 Anon, we rock n roll 🙌🤘🎸...
