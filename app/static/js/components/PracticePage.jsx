@@ -2473,7 +2473,7 @@ export const PracticePage = () => {
 
     // Pattern: Allow chord names (letters, numbers, #, b, ♭, ♯, /), commas, spaces, and section names on their own lines
     // Valid examples: "C, G, Am, F", "verse\nC, G, Am\nchorus\nF, C, G", "Em7, A#, Bb", "Intro D A G D", "C/G"
-    const validPattern = /^[A-Za-z0-9#b♭♯\/\s,\n\r-]+$/;
+    const validPattern = /^[A-Za-z0-9#b♭♯/\s,\n\r-]+$/;
 
     if (!validPattern.test(trimmedInput)) {
       setManualInputErrors(prev => ({
@@ -2494,7 +2494,7 @@ export const PracticePage = () => {
 
       // Check if this line contains only chords (space-separated or comma-separated)
       const words = cleanLine.split(/[,\s]+/).filter(word => word.trim().length > 0);
-      const allWordsAreChords = words.every(word => /^[A-Ga-g][A-Za-z0-9#b♭♯\/]*$/.test(word));
+      const allWordsAreChords = words.every(word => /^[A-Ga-g][A-Za-z0-9#b♭♯/]*$/.test(word));
 
       return allWordsAreChords;
     });
@@ -2624,7 +2624,7 @@ export const PracticePage = () => {
 
     // Sanitize and validate YouTube URL format
     const sanitizedUrl = youtubeUrl.trim().replace(/[<>"']/g, '');
-    const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+(&[\w=&-]*)?$/;
+    const youtubeRegex = /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=[\w-]+|youtu\.be\/[\w-]+)(\?.*|&.*)?$/;
 
     if (!youtubeRegex.test(sanitizedUrl)) {
       setApiError({ message: 'Please enter a valid YouTube URL (e.g., https://youtube.com/watch?v=...)' });
@@ -2634,68 +2634,41 @@ export const PracticePage = () => {
 
     setAutocreateProgress(prev => ({
       ...prev,
-      [itemId]: 'processing'
+      [itemId]: 'checking_transcript'
     }));
 
     try {
-      // Create a mock text file to send the YouTube URL via the autocreate endpoint
-      const youtubeBlob = new Blob([sanitizedUrl], { type: 'text/plain' });
-      const youtubeFile = new File([youtubeBlob], 'youtube_transcript.txt', { type: 'text/plain' });
-
-      const formData = new FormData();
-      formData.append('file0', youtubeFile);
-      formData.append('itemId', itemId);
-      formData.append('userChoice', 'chord_names'); // This will trigger chord name processing
-
-      console.log(`[AUTOCREATE] Sending YouTube URL to autocreate endpoint`);
-
-      const response = await fetch('/api/autocreate-chord-charts', {
+      // First, check if transcript is available and fetch it
+      console.log('[YOUTUBE] Fetching transcript from YouTube API');
+      const transcriptResponse = await fetch('/api/youtube/check-transcript', {
         method: 'POST',
-        body: formData
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sanitizedUrl })
       });
 
-      if (!response.ok) {
-        const errorData = await response.text();
-        throw new Error(`Failed to process YouTube URL: ${response.status} ${response.statusText} - ${errorData}`);
+      if (!transcriptResponse.ok) {
+        throw new Error('Failed to fetch YouTube transcript');
       }
 
-      const result = await response.json();
-      console.log(`[AUTOCREATE] YouTube URL processed successfully:`, result);
+      const transcriptData = await transcriptResponse.json();
 
-      // Force refresh UI state
-      const chartResponse = await fetch(`/api/items/${itemId}/chord-charts`);
-      const charts = await chartResponse.json();
+      if (!transcriptData.hasTranscript || !transcriptData.transcript) {
+        setApiError({
+          message: 'This YouTube video does not have a transcript available. Please try a different video or use file upload instead.'
+        });
+        setShowApiErrorModal(true);
+        return;
+      }
 
-      setChordCharts(prev => ({
-        ...prev,
-        [itemId]: charts
-      }));
+      console.log(`[YOUTUBE] Transcript fetched successfully, length: ${transcriptData.transcript.length} characters`);
 
-      setChordSections(prev => ({
-        ...prev,
-        [itemId]: buildSectionsFromCharts(charts)
-      }));
-
-      // Clear the YouTube input
-      setYoutubeUrls(prev => ({
-        ...prev,
-        [itemId]: ''
-      }));
-
-      // Show success modal
-      const itemDetails = getItemDetails(itemId);
-      setAutocreateSuccessData({
-        itemTitle: itemDetails?.C || `Item ${itemId}`,
-        chordsCreated: charts.length,
-        processingMethod: 'YouTube URL'
-      });
-      setShowAutocreateSuccessModal(true);
+      // Now process the transcript using the existing function
+      await processYouTubeTranscript(itemId, transcriptData.transcript);
 
     } catch (error) {
       console.error('Error processing YouTube URL:', error);
       setApiError({ message: 'Failed to process YouTube URL. Please try again.' });
       setShowApiErrorModal(true);
-    } finally {
       setAutocreateProgress(prev => {
         const newState = { ...prev };
         delete newState[itemId];

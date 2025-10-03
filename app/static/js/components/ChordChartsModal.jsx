@@ -15,11 +15,11 @@ const debounce = (func, wait) => {
 };
 
 import { Button } from '@ui/button';
-import { ChevronDown, ChevronRight, Check, Plus, FileText, Book, Music, Upload, AlertTriangle, X, Wand, Sparkles, Loader2, Printer } from 'lucide-react';
+import { Check, Music, Upload, AlertTriangle, X, Wand, Sparkles, Loader2, Printer } from 'lucide-react';
 import { ChordChartEditor } from './ChordChartEditor';
 import ApiErrorModal from './ApiErrorModal';
 import AutocreateSuccessModal from './AutocreateSuccessModal';
-import { serverDebug, serverInfo } from '../utils/logging';
+import { serverDebug } from '../utils/logging';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -321,7 +321,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
     "Yeah, I could show you a progress bar, but we both know it would just lie to you"
   ];
   const [processingMessageIndex, setProcessingMessageIndex] = useState(0);
-  const [messageQueue, setMessageQueue] = useState([]);
+  const [_messageQueue, setMessageQueue] = useState([]);
 
   // Modal and copy states
   const [showApiErrorModal, setShowApiErrorModal] = useState(false);
@@ -410,8 +410,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
   // Copy all the chord chart functions from PracticePage...
   const loadChordChartsForItem = async (itemId) => {
-    if (chordCharts[itemId]) return; // Already loaded
-
+    // Always fetch fresh data to ensure UI is up-to-date after autocreate
     try {
       const response = await fetch(`/api/items/${itemId}/chord-charts`);
       if (response.ok) {
@@ -617,7 +616,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
     });
   };
 
-  const handleEditChordChart = (itemId, chordId, chartData) => {
+  const handleEditChordChart = (itemId, chordId, _chartData) => {
     setEditingChordId(chordId);
     setInsertionContext(null);
     setScrollBackContext({
@@ -854,7 +853,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
     // Pattern: Allow chord names (letters, numbers, #, b, ♭, ♯, /), commas, spaces, and section names on their own lines
     // Valid examples: "C, G, Am, F", "verse\nC, G, Am\nchorus\nF, C, G", "Em7, A#, Bb", "Intro D A G D", "C/G"
-    const validPattern = /^[A-Za-z0-9#b♭♯\/\s,\n\r-]+$/;
+    const validPattern = /^[A-Za-z0-9#b♭♯/\s,\n\r-]+$/;
 
     if (!validPattern.test(trimmedInput)) {
       setManualInputErrors(prev => ({
@@ -875,7 +874,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
       // Check if this line contains only chords (space-separated or comma-separated)
       const words = cleanLine.split(/[,\s]+/).filter(word => word.trim().length > 0);
-      const allWordsAreChords = words.every(word => /^[A-Ga-g][A-Za-z0-9#b♭♯\/]*$/.test(word));
+      const allWordsAreChords = words.every(word => /^[A-Ga-g][A-Za-z0-9#b♭♯/]*$/.test(word));
 
       return allWordsAreChords;
     });
@@ -996,6 +995,17 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
       setAutocreateProgress(prev => ({ ...prev, [itemId]: 'complete' }));
 
+      // Show success modal
+      const itemDetails = getItemDetails(itemId);
+      setAutocreateSuccessData({
+        itemName: itemDetails?.C || `Item ${itemId}`,
+        chordCount: charts.length,
+        contentType: 'chord_names',
+        uploadedFileNames: 'Manual entry',
+        isVisionAnalysis: false
+      });
+      setShowAutocreateSuccessModal(true);
+
       // Clean up abort controller (copied from PracticePage)
       setAutocreateAbortController(prev => {
         const newState = { ...prev };
@@ -1042,22 +1052,50 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
     console.log(`[YOUTUBE] URL validation passed, setting progress state`);
     setAutocreateProgress(prev => ({
       ...prev,
-      [itemId]: 'processing'
+      [itemId]: 'checking_transcript'
     }));
 
     try {
-      console.log(`[YOUTUBE] Creating Blob and File objects`);
-      // Create a mock text file to send the YouTube URL via the autocreate endpoint
-      const youtubeBlob = new Blob([sanitizedUrl], { type: 'text/plain' });
-      const youtubeFile = new File([youtubeBlob], 'youtube_transcript.txt', { type: 'text/plain' });
+      // First, check if transcript is available and fetch it
+      console.log('[YOUTUBE] Fetching transcript from YouTube API');
+      const transcriptResponse = await fetch('/api/youtube/check-transcript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sanitizedUrl })
+      });
 
-      console.log(`[YOUTUBE] Creating FormData`);
+      if (!transcriptResponse.ok) {
+        throw new Error('Failed to fetch YouTube transcript');
+      }
+
+      const transcriptData = await transcriptResponse.json();
+
+      if (!transcriptData.hasTranscript || !transcriptData.transcript) {
+        setApiError({
+          message: 'This YouTube video does not have a transcript available. Please try a different video or use file upload instead.'
+        });
+        setShowApiErrorModal(true);
+        return;
+      }
+
+      console.log(`[YOUTUBE] Transcript fetched successfully, length: ${transcriptData.transcript.length} characters`);
+
+      // Update progress to processing
+      setAutocreateProgress(prev => ({
+        ...prev,
+        [itemId]: 'processing'
+      }));
+
+      // Create a file with the actual transcript text
+      const transcriptBlob = new Blob([transcriptData.transcript], { type: 'text/plain' });
+      const transcriptFile = new File([transcriptBlob], 'youtube_transcript.txt', { type: 'text/plain' });
+
       const formData = new FormData();
-      formData.append('file0', youtubeFile);
+      formData.append('file0', transcriptFile);
       formData.append('itemId', itemId);
-      formData.append('userChoice', 'chord_names'); // This will trigger chord name processing
+      formData.append('userChoice', 'chord_names');
 
-      console.log(`[AUTOCREATE] Sending YouTube URL to autocreate endpoint`);
+      console.log(`[AUTOCREATE] Sending transcript to autocreate endpoint`);
 
       const response = await fetch('/api/autocreate-chord-charts', {
         method: 'POST',
@@ -1066,11 +1104,11 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
       if (!response.ok) {
         const errorData = await response.text();
-        throw new Error(`Failed to process YouTube URL: ${response.status} ${response.statusText} - ${errorData}`);
+        throw new Error(`Failed to process YouTube transcript: ${response.status} ${response.statusText} - ${errorData}`);
       }
 
       const result = await response.json();
-      console.log(`[AUTOCREATE] YouTube URL processed successfully:`, result);
+      console.log(`[AUTOCREATE] YouTube transcript processed successfully:`, result);
 
       // Force refresh UI state
       const chartResponse = await fetch(`/api/items/${itemId}/chord-charts`);
@@ -1095,9 +1133,11 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
       // Show success modal
       const itemDetails = getItemDetails(itemId);
       setAutocreateSuccessData({
-        itemTitle: itemDetails?.C || `Item ${itemId}`,
-        chordsCreated: charts.length,
-        processingMethod: 'YouTube URL'
+        itemName: itemDetails?.C || `Item ${itemId}`,
+        chordCount: charts.length,
+        contentType: 'chord_names',
+        uploadedFileNames: 'YouTube transcript',
+        isVisionAnalysis: false
       });
       setShowAutocreateSuccessModal(true);
 
@@ -1163,6 +1203,18 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
         setUploadedFiles(prev => ({ ...prev, [itemId]: [] }));
 
         trackChordChartEvent('autocreate_completed', { itemId, fileCount: files.length });
+
+        // Show success modal
+        const itemDetails = getItemDetails(itemId);
+        const fileNames = files.map(f => f.name).join(', ');
+        setAutocreateSuccessData({
+          itemName: itemDetails?.C || `Item ${itemId}`,
+          chordCount: charts.length,
+          contentType: 'auto-detected',
+          uploadedFileNames: fileNames,
+          isVisionAnalysis: false
+        });
+        setShowAutocreateSuccessModal(true);
 
         // Clean up abort controller (copied from PracticePage)
         setAutocreateAbortController(prev => {
@@ -1318,6 +1370,9 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
             <Music className="h-5 w-5" />
             Chord Charts - {itemTitle || itemId}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            View and manage chord charts for this practice item
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -1872,7 +1927,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                   <div data-editor-for-item={itemReferenceId}>
                     <ChordChartEditor
                     itemId={itemReferenceId}
-                    defaultTuning={itemDetails?.H || 'EADGBE'}
+                    defaultTuning={getItemDetails(itemReferenceId)?.H || 'EADGBE'}
                     editingChordId={editingChordId}
                     insertionContext={insertionContext}
                     onSave={(chartData) => handleSaveChordChart(itemReferenceId, chartData)}

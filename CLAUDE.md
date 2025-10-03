@@ -51,10 +51,20 @@ This is IMPORTANT for managing rate-limiting and billing efficiency. **Sonnet 4 
 3. **Pattern References**: Point Sonnet to existing examples in the codebase to follow
 4. **Success Criteria**: Define what "done" looks like for the delegated task
 
+#### Subagent Opportunities in This Project
+
+**Use Task tool for token-heavy workflows:**
+- **Testing** (General-Purpose): Multi-step Playwright scenarios, end-to-end feature validation
+- **Investigation** (Opus 4.1): Multi-file code tracing (React→Flask→DataLayer→DB), ID mapping issues
+- **Refactoring** (General-Purpose): Pattern updates across 10+ files, function renaming
+- **Debugging** (Opus 4.1): Multi-subsystem issues, performance analysis, race conditions
+
+**Rule**: Tasks >20k tokens → delegate to preserve main context for coordination.
+
 ### Claude 4 Prompt Engineering Best Practices
 
 #### Multi-Context Window Workflows
-As you approach your token budget limit, save your current progress and state to memory before the context window refreshes. Use as much of the remaining context window as possible before saving, and let me know how much of the context window is remaining at that time.
+When the context-window remaining gets down to 5%, or when your tasks for your next turn would be likely to drop the remaining window below 5%, then save your current progress and state to memory before the context window refreshes. Use as much of the remaining context window as possible before saving, and let me know how much of the context window is remaining at that time.
 
 #### State Management Best Practices
 - After completing a task that involves tool use, provide a quick summary of the work you've done
@@ -67,7 +77,7 @@ If you intend to call multiple tools and there are no dependencies between the t
 Never speculate about code you have not opened. If the user references a specific file, you MUST read the file before answering. Make sure to investigate and read relevant files BEFORE answering questions about the codebase. Never make any claims about code before investigating unless you are certain of the correct answer - give grounded and hallucination-free answers.
 
 #### Temporary File Cleanup
-If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task.
+If you create any temporary new files, scripts, or helper files for iteration, clean up these files by removing them at the end of the task. Also remove Playwright screenshots and snapshots when done with them.
 
 #### Avoid Test-Focused Development
 Do not focus solely on passing tests or hard-code solutions just to make tests pass. Prioritize understanding the underlying requirements and implementing robust, generalizable solutions that address the actual problem rather than just satisfying test assertions.
@@ -125,6 +135,9 @@ python run.py           # Start Flask server only (port 5000)
 
 ### Test Content for Playwright MCP Testing
 
+#### Test items for chord charts
+When testing chord chart generation or editing, please select items which are not song titles. Examples of good test items are "Remember to stretch", "Basic warm up and down", "Take five", etc. (This will prevent us from accidentally deleting chord charts that I actually use during practice, which are on song items.)
+
 #### File Upload Testing
 When testing file upload features with Playwright, use these sample files (translate Windows paths to WSL2 paths):
 
@@ -157,6 +170,34 @@ Ab Bm Ebsus2 Cmin
 ### Playwright MCP Testing Guide
 
 **Testing Philosophy**: When adding new functionality or fixing bugs, use Playwright MCP to test changes. Test after each testable change, because it's easier to fix bugs as we go than it is to find and fix bugs after a large number of changes.
+
+#### Post-Change Testing Protocol
+
+**CRITICAL**: After editing React components, ALWAYS test affected UI before marking task complete.
+
+**Process**:
+1. **Analyze**: Which pages/modals import this component? (Practice page, Items modal, Routines modal, etc.)
+2. **Delegate**: Use Task tool + Playwright MCP (avoid token bloat in main conversation)
+3. **Target**: Test only the functionality affected by your changes, not entire app
+4. **Report**: Confirm working or identify specific issues found
+
+**Example**: After editing `ChordChartEditor.jsx`:
+- Affected areas: Practice page chord charts, Items modal, Routines modal
+- Test focus: Chord editing, section management, autofill behavior
+- Delegate: "Test chord editing on Practice page - verify [specific change] works correctly"
+
+**Never mark a todo complete until UI testing confirms the change works.**
+
+#### Token Efficiency Best Practices
+
+**CRITICAL**: Playwright MCP snapshots consume 5k-15k tokens each. Pattern: ONE snapshot (get refs) → ALL actions → ONE screenshot (verify). Delegate multi-step tests (3+ actions) to Task tool with general-purpose agent to preserve main conversation context.
+
+#### Wait Time Expectations
+
+- **UI updates** (button clicks, form inputs, navigation): Usually <100ms, no explicit waits needed
+- **API responses** (autocreate, file upload, transcript fetch): 5-30 seconds depending on complexity
+- Use `browser_wait_for` with `time` parameter only for API operations
+- For UI verification after actions, take a screenshot - don't use additional snapshots
 
 #### Environment Setup
 - **WSLg**: WSL2 includes WSLg (WSL GUI support) which allows Chrome to display in a GUI window during testing
@@ -262,8 +303,9 @@ mcp__playwright__browser_console_messages(onlyErrors=true)
 - When debugging to understand what went wrong
 
 **Screenshot Tools:**
-- `browser_take_screenshot`: Captures current viewport or specific elements
-- `browser_snapshot`: Better for identifying interactive elements (includes accessibility tree)
+- `browser_take_screenshot`: Captures current viewport or specific elements, much lower token use so prefer screenshots to snapshots
+- `browser_snapshot`: Better for identifying interactive elements (includes accessibility tree). Massive token use, so use only when neccessary 
+- Remember to delete screenshots and snapshots when you're done with them
 
 #### Common Testing Scenarios
 
@@ -290,6 +332,9 @@ mcp__playwright__browser_console_messages(onlyErrors=true)
 3. Choose file upload or manual entry
 4. Complete workflow
 5. Verify old charts replaced with new ones
+
+#### Leave Browswer Open When Done
+- Please leave the browser open when you're done testing (in case I want to review console logs, history, etc.)
 
 #### Troubleshooting
 
@@ -386,65 +431,11 @@ The `gpr.sh` script runs:
 ## Special Considerations
 
 ### PostgreSQL Database (Migration Complete)
-- **Status**: Migration completed - all tables migrated from Google Sheets using **exact 1:1 replica approach**
-- **CRITICAL LESSON**: Stop over-engineering migrations - use exact sheet structure to avoid massive code refactoring
-- **Schema**: Uses original Google Sheets column names (chord_id, item_id as string, order_col) for minimal code changes
-- **Comma-separated ItemIDs**: Preserved exactly as "107, 61" format with LIKE pattern matching in queries
-- Traditional relational database design with proper foreign key relationships
-- Improved performance over sheet-based operations
-- Standard SQL operations and ACID compliance
-- Better support for concurrent access and complex queries
+**Schema quirks from Sheets migration**: Column A = DB primary key, Column B = ItemID (string "107"). Frontend uses Column B. Chord charts use comma-separated ItemIDs ("67, 100, 1"). Order column has gaps from drag-drop - don't sort by it.
 
-#### DataLayer Architecture Pattern
-- **`app/data_layer.py`**: Unified interface supporting both postgres and sheets modes
-- **Critical**: API routes MUST use DataLayer, never import sheets functions directly
-- **ItemID Conversion**: DataLayer handles Google Sheets ItemID → PostgreSQL primary key conversion
-- **Mode Detection**: Automatically switches based on environment variables (`MIGRATION_MODE=postgres`)
+**DataLayer**: Routes MUST use `app/data_layer.py`, never import `app/sheets.py` directly. Wrong data returned = bypassed DataLayer.
 
-#### Common DataLayer Issues
-**Symptom**: API returns wrong/empty data despite correct database contents
-**Root Cause**: Routes importing sheets functions directly instead of using DataLayer
-**Fix Pattern**:
-```python
-# WRONG (bypasses DataLayer):
-from app.sheets import get_chord_charts_for_item
-charts = get_chord_charts_for_item(item_id)
-
-# CORRECT (uses DataLayer):
-from app.data_layer import DataLayer
-data_layer = DataLayer() 
-charts = data_layer.get_chord_charts_for_item(item_id)
-```
-
-#### Migration Data Integrity Rules
-- **CRITICAL:** Database tables must preserve exact Google Sheets structure
-- **NO SORTING:** Repository/service layers should not sort data - preserve insertion order
-- **Order Column:** Contains drag-and-drop values with gaps (0,1,2,3,5,6...) - use for display logic, not sorting
-- **Physical Row Preservation:** Database should mirror exact physical sheet row sequence
-- **CommonChords Migration:** Use `migrate_common_chords.py` with rate limiting for all 12,708+ records
-
-#### Critical PostgreSQL Migration Debugging Patterns
-
-**ID Mapping Issues (Most Common Bug Pattern):**
-- **Column A**: Database primary key (auto-incrementing integer)
-- **Column B**: Google Sheets ItemID (string like "107")
-- **CRITICAL**: Frontend must use ItemIDs (Column B) for API calls, never primary keys (Column A)
-- **Sharing Model**: Chord charts use comma-separated ItemIDs like "67, 100, 1, 2"
-
-**Debugging ID Mismatches:**
-```javascript
-// WRONG: Using primary keys (Column A)
-const targetIds = selectedItems.map(item => item['A'])
-
-// CORRECT: Using ItemIDs (Column B)
-const targetIds = selectedItems.map(item => item['B'])
-```
-
-**Chord Chart Sharing Model:**
-- **Delete from one item**: Remove only that ItemID from comma-separated list
-- **Copy to items**: Add ItemIDs to existing comma-separated list
-- **NEVER**: Delete entire record when removing from shared charts
-- **Endpoint pattern**: `/api/items/{item_id}/chord-charts/{chart_id}` (item context required)
+**Common bugs**: Frontend using Column A instead of B for API calls. Deleting entire chord chart record instead of removing one ItemID from comma-separated list.
 
 ### File Path Handling
 - WSL-friendly path mapping for Windows folders (see `app/routes.py`)
