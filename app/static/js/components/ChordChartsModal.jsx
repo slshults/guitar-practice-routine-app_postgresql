@@ -987,7 +987,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
           </style>
         </head>
         <body>
-          <h1>Chord Charts - ${itemTitle || itemId}</h1>
+          <h2>Chord Charts - ${itemTitle || itemId}</h2>
           ${getChordSections(itemId).map(section => `
             <div class="section">
               <div class="section-header">${section.label} ${section.repeatCount}</div>

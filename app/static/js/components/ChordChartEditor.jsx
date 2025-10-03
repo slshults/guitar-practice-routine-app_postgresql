@@ -799,8 +799,9 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
               disabled={isLoadingChord}
             />
             {isLoadingChord && (
-              <div className="absolute right-2 top-2 text-yellow-400 text-xs">
-                Loading...
+              <div className="absolute right-2 top-2 text-yellow-400 text-xs" role="status" aria-live="polite">
+                <span className="sr-only">Loading chord data</span>
+                <span aria-hidden="true">Loading...</span>
               </div>
             )}
           </div>

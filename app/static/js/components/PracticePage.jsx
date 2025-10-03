@@ -169,7 +169,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
         // Render the chart
         chartInstance.configure(config).chord(chordData).draw();
 
-        // Style the SVG to fit the container
+        // Style the SVG to fit the container and add accessibility attributes
         setTimeout(() => {
           const svg = chartRef.current?.querySelector('svg');
           if (svg) {
@@ -179,6 +179,10 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
             svg.style.maxHeight = '192px';
             svg.style.position = 'relative';
             svg.style.zIndex = '1';
+
+            // Add accessibility attributes
+            svg.setAttribute('role', 'img');
+            svg.setAttribute('aria-label', generateChordDescription(chart));
           }
         }, 50);
       } catch (error) {
@@ -214,6 +218,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
           left: '4px',
           zIndex: 20
         }}
+        aria-label="Edit chord chart"
       >
         ✏️
       </button>
@@ -232,6 +237,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
           right: '4px',
           zIndex: 20
         }}
+        aria-label="Delete chord chart"
       >
         ×
       </button>
@@ -251,6 +257,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
             right: '32px',
             zIndex: 20
           }}
+          aria-label="Insert chord after this one"
         >
           +
         </button>
@@ -268,6 +275,54 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
     </div>
   );
 });
+
+// Helper function to generate accessible description for chord charts
+const generateChordDescription = (chart) => {
+  const actualChartData = chart.chordData || chart;
+  const title = chart.title || 'Chord';
+
+  // Build description parts
+  const parts = [`${title} chord diagram.`];
+
+  // Describe finger positions
+  const fingers = actualChartData.fingers || [];
+  if (fingers.length > 0) {
+    const fingerPositions = fingers.map(finger => {
+      const [string, fret, fingerNum] = finger;
+      const stringNum = 7 - string; // Convert to 1-indexed from high to low (string 1 = high E)
+      const fingerText = fingerNum ? ` with finger ${fingerNum}` : '';
+      return `string ${stringNum} fret ${fret}${fingerText}`;
+    });
+    parts.push(`Finger positions: ${fingerPositions.join(', ')}.`);
+  }
+
+  // Describe open strings
+  const openStrings = actualChartData.openStrings || [];
+  if (openStrings.length > 0) {
+    const openStringNums = openStrings.map(s => 7 - s).sort((a, b) => a - b);
+    parts.push(`Open strings: ${openStringNums.join(', ')}.`);
+  }
+
+  // Describe muted strings
+  const mutedStrings = actualChartData.mutedStrings || [];
+  if (mutedStrings.length > 0) {
+    const mutedStringNums = mutedStrings.map(s => 7 - s).sort((a, b) => a - b);
+    parts.push(`Muted strings: ${mutedStringNums.join(', ')}.`);
+  }
+
+  // Describe barres
+  const barres = actualChartData.barres || [];
+  if (barres.length > 0) {
+    const barreDescriptions = barres.map(barre => {
+      const fromString = 7 - barre.fromString;
+      const toString = 7 - barre.toString;
+      return `Barre at fret ${barre.fret} from string ${fromString} to ${toString}`;
+    });
+    parts.push(`${barreDescriptions.join('. ')}.`);
+  }
+
+  return parts.join(' ');
+};
 
 // Helper functions for copy modal fuzzy matching (outside component to avoid re-creation)
 // Text normalization function for consistent matching
@@ -3216,27 +3271,39 @@ export const PracticePage = () => {
               key={routineItem['A']}  // Column A is ID
               className="rounded-lg bg-gray-800 overflow-hidden"
             >
-              <div 
+              <h2 className="sr-only">Practice Item: {displayTitle}</h2>
+              <div
                 className="flex items-center justify-between p-5 cursor-pointer hover:bg-gray-700"
                 onClick={() => toggleItem(routineItem['A'])}  // Column A is ID
+                role="button"
+                aria-expanded={isExpanded}
+                aria-controls={`practice-item-content-${routineItem['A']}`}
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggleItem(routineItem['A']);
+                  }
+                }}
               >
                 <div className="flex items-center space-x-4">
                   <button
-                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isCompleted 
-                        ? 'bg-green-500 border-green-500 text-white' 
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isCompleted
+                        ? 'bg-green-500 border-green-500 text-white'
                         : 'border-gray-400 text-transparent hover:border-gray-300'}`}
                     onClick={(e) => toggleComplete(routineItem['A'], e)}  // Column A is ID
+                    aria-label={isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
                   >
-                    <Check className="h-4 w-4" />
+                    <Check className="h-4 w-4" aria-hidden="true" />
                   </button>
                   {isExpanded ? (
-                    <ChevronDown className="h-5 w-5 text-gray-400" />
+                    <ChevronDown className="h-5 w-5 text-gray-400" aria-hidden="true" />
                   ) : (
-                    <ChevronRight className="h-5 w-5 text-gray-400" />
+                    <ChevronRight className="h-5 w-5 text-gray-400" aria-hidden="true" />
                   )}
-                  <span className={`text-xl ${isCompleted ? 'line-through text-gray-500' : ''}`}>
+                  <span className={`text-xl ${isCompleted ? 'line-through text-gray-500' : ''}`} id={`practice-item-title-${routineItem['A']}`}>
                     {displayTitle}
-                    {isLoadingDetails && <span className="text-gray-500 ml-2">(Loading details...)</span>}
+                    {isLoadingDetails && <span className="text-gray-500 ml-2" role="status" aria-live="polite">(Loading details...)</span>}
                   </span>
                 </div>
                 <div className="flex items-center space-x-4">
@@ -3304,18 +3371,28 @@ export const PracticePage = () => {
                   {/* Description */}
                   <div className="space-y-2 px-4">
                     {/* Chord Charts toggle */}
-                    <div 
+                    <div
                       className="flex items-center justify-between p-2 hover:bg-gray-700 rounded cursor-pointer"
                       onClick={(e) => toggleChords(routineItem['A'], e)}
+                      role="button"
+                      aria-expanded={isChordsExpanded}
+                      aria-controls={`chord-charts-content-${routineItem['A']}`}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleChords(routineItem['A'], e);
+                        }
+                      }}
                     >
                       <div className="flex items-center">
                         {isChordsExpanded ? (
-                          <ChevronDown className="h-5 w-5 text-gray-400 mr-2" />
+                          <ChevronDown className="h-5 w-5 text-gray-400 mr-2" aria-hidden="true" />
                         ) : (
-                          <ChevronRight className="h-5 w-5 text-gray-400 mr-2" />
+                          <ChevronRight className="h-5 w-5 text-gray-400 mr-2" aria-hidden="true" />
                         )}
-                        <h3 className="text-xl text-gray-300 flex items-center">
-                          <Music className="h-5 w-5 mr-2" />
+                        <h3 className="text-xl text-gray-300 flex items-center" id={`chord-charts-title-${routineItem['A']}`}>
+                          <Music className="h-5 w-5 mr-2" aria-hidden="true" />
                           Chord Charts
                         </h3>
                       </div>
@@ -3323,9 +3400,12 @@ export const PracticePage = () => {
 
                     {/* Collapsible chord chart content */}
                     {isChordsExpanded && (
-                      <div 
+                      <div
+                        id={`chord-charts-content-${routineItem['A']}`}
                         className="bg-gray-700 rounded-lg p-4 chord-charts-container relative"
                         data-item-id={routineItem['B']}
+                        role="region"
+                        aria-labelledby={`chord-charts-title-${routineItem['A']}`}
                       >
                         
                         {/* Display chord sections */}
@@ -3703,9 +3783,9 @@ export const PracticePage = () => {
                                                 </div>
                                               )}
                                               {progress === 'uploading' && (
-                                                <div className="space-y-3">
+                                                <div className="space-y-3" role="status" aria-live="polite">
                                                   <div className="flex items-center justify-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500"></div>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-500" aria-hidden="true"></div>
                                                     <span className="text-gray-400">Uploading files...</span>
                                                   </div>
                                                   <br />
@@ -3721,9 +3801,9 @@ export const PracticePage = () => {
                                                 </div>
                                               )}
                                               {progress === 'processing_transcript' && (
-                                                <div className="space-y-3">
+                                                <div className="space-y-3" role="status" aria-live="polite">
                                                   <div className="flex items-center justify-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500" aria-hidden="true"></div>
                                                     <span className="text-white">Processing transcript...</span>
                                                   </div>
                                                   <br />
@@ -3739,12 +3819,12 @@ export const PracticePage = () => {
                                                 </div>
                                               )}
                                               {progress === 'processing' && (
-                                                <div className="space-y-3">
+                                                <div className="space-y-3" role="status" aria-live="polite">
                                                   <div className="flex items-center justify-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500" aria-hidden="true"></div>
                                                     <div className="flex items-center">
                                                       <span className="text-white">{processingMessages[processingMessageIndex]}</span>
-                                                      <div className="ml-2 animate-spin">⚙️</div>
+                                                      <div className="ml-2 animate-spin" aria-hidden="true">⚙️</div>
                                                     </div>
                                                   </div>
                                                   <br />
@@ -3905,38 +3985,53 @@ export const PracticePage = () => {
                     )}
 
                     {/* Notes toggle */}
-                    <div 
+                    <div
                       className="flex items-center justify-between p-2 hover:bg-gray-700 rounded cursor-pointer"
                       onClick={(e) => toggleNotes(routineItem['A'], e)}  // Column A is ID
+                      role="button"
+                      aria-expanded={isNotesExpanded}
+                      aria-controls={`notes-content-${routineItem['A']}`}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          toggleNotes(routineItem['A'], e);
+                        }
+                      }}
                     >
                       <div className="flex items-center">
                         {isNotesExpanded ? (
-                          <ChevronDown className="h-5 w-5 text-gray-400 mr-2" />
+                          <ChevronDown className="h-5 w-5 text-gray-400 mr-2" aria-hidden="true" />
                         ) : (
-                          <ChevronRight className="h-5 w-5 text-gray-400 mr-2" />
+                          <ChevronRight className="h-5 w-5 text-gray-400 mr-2" aria-hidden="true" />
                         )}
-                        <h3 className="text-xl text-gray-300 flex items-center">
-                          <FileText className="h-5 w-5 mr-2" />
+                        <h3 className="text-xl text-gray-300 flex items-center" id={`notes-title-${routineItem['A']}`}>
+                          <FileText className="h-5 w-5 mr-2" aria-hidden="true" />
                           Notes
                         </h3>
                       </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className="text-gray-300"
                         onClick={(e) => {
                           e.stopPropagation();
                           addNote(routineItem['B'], e);  // Column B is Item ID
                         }}
                       >
-                        <Plus className="h-4 w-4 mr-2" />
+                        <Plus className="h-4 w-4 mr-2" aria-hidden="true" />
                         {itemNotes ? 'Edit note' : 'Add note'}
                       </Button>
                     </div>
 
                     {/* Collapsible notes content */}
                     {isNotesExpanded && itemNotes && (
-                      <div className="px-4">
+                      <div
+                        id={`notes-content-${routineItem['A']}`}
+                        className="px-4"
+                        role="region"
+                        aria-labelledby={`notes-title-${routineItem['A']}`}
+                      >
                         <div className="bg-gray-700 p-3 rounded">
                           <p className="text-gray-300 whitespace-pre-wrap">{itemNotes}</p>
                         </div>
@@ -3993,7 +4088,12 @@ export const PracticePage = () => {
                 </div>
               )}
               {expandedItems.has(routineItem['A']) && (
-                <div className="px-5 pb-5">
+                <div
+                  id={`practice-item-content-${routineItem['A']}`}
+                  className="px-5 pb-5"
+                  role="region"
+                  aria-labelledby={`practice-item-title-${routineItem['A']}`}
+                >
                   <div className="text-gray-400">
                   </div>
                 </div>

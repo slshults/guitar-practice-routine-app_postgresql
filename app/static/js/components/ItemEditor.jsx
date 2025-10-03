@@ -152,7 +152,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
             Edit the details of your practice item
           </DialogDescription>
           {error && (
-            <div className="mt-2 text-sm text-red-500">
+            <div className="mt-2 text-sm text-red-500" role="alert">
               {error}
             </div>
           )}
@@ -168,7 +168,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
               placeholder="Enter item title"
               required
               className="bg-gray-900 text-white"
-              autocomplete="off"
+              autoComplete="off"
             />
           </div>
 
@@ -182,7 +182,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
               onChange={(e) => handleFormChange('E', parseInt(e.target.value) || 5)}
               required
               className="bg-gray-900 text-white"
-              autocomplete="off"
+              autoComplete="off"
             />
           </div>
 
@@ -208,7 +208,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
               onChange={(e) => handleFormChange('H', e.target.value)}
               placeholder="e.g. EADGBE"
               className="bg-gray-900 text-white"
-              autocomplete="off"
+              autoComplete="off"
             />
           </div>
 
@@ -220,7 +220,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
               onChange={(e) => handleFormChange('D', e.target.value)}
               placeholder="Enter any notes"
               className="h-24 bg-gray-900 text-white"
-              autocomplete="off"
+              autoComplete="off"
             />
           </div>
 

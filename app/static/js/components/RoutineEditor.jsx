@@ -217,8 +217,8 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
     }
   };
 
-  if (loading) return <div className="text-2xl text-center p-8">Loading...</div>;
-  if (hookError) return <div className="text-2xl text-red-500 text-center p-8">{hookError}</div>;
+  if (loading) return <div className="text-2xl text-center p-8" role="status" aria-live="polite">Loading...</div>;
+  if (hookError) return <div className="text-2xl text-red-500 text-center p-8" role="alert">{hookError}</div>;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -231,7 +231,7 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
             Add or remove items and arrange them in your preferred order
           </DialogDescription>
           {error && (
-            <div className="mt-2 text-sm text-red-500">
+            <div className="mt-2 text-sm text-red-500" role="alert">
               {error}
             </div>
           )}
@@ -248,7 +248,7 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
                   value={newRoutineName}
                   onChange={(e) => setNewRoutineName(e.target.value)}
                   className="mt-2"
-                  autocomplete="off"
+                  autoComplete="off"
                 />
               )}
             </CardHeader>
@@ -287,7 +287,7 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
                   placeholder="Search items..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  autocomplete="off"
+                  autoComplete="off"
                 />
               </div>
             </CardHeader>

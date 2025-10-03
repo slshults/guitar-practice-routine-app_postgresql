@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, Pencil, Trash2, GripVertical, Music } from 'lucide-react';
+import { Plus, Pencil, Trash2, GripVertical } from 'lucide-react';
 import { trackItemOperation } from '../utils/analytics';
 import { Card, CardHeader, CardTitle, CardContent } from '@ui/card';
 import { Button } from '@ui/button';
 import { Input } from '@ui/input';
 import { ItemEditor, BulkSongbookUpdate } from './ItemEditor';
 import ChordChartsModal from './ChordChartsModal';
+import { ChordIcon } from './icons/ChordIcon';
 import {
   DndContext,
   closestCenter,
@@ -77,16 +78,17 @@ const SortableItem = React.memo(({ item, onEdit, onDelete, onOpenChordCharts }) 
           onClick={() => onEdit(item)}
           className="hover:bg-gray-700"
         >
-          <Pencil className="h-5 w-5" />
+          <Pencil className="h-5 w-5" aria-hidden="true" />
+          <span className="sr-only">Edit item</span>
         </Button>
         <Button
           variant="ghost"
           size="lg"
           onClick={() => onOpenChordCharts(item['B'], item['C'])}
           className="text-blue-400 hover:text-blue-300 hover:bg-gray-700"
-          title="View chord charts"
         >
-          <Music className="h-5 w-5" />
+          <ChordIcon className="h-5 w-5" aria-hidden="true" />
+          <span className="sr-only">Chord charts</span>
         </Button>
         <Button
           variant="ghost"
@@ -94,7 +96,8 @@ const SortableItem = React.memo(({ item, onEdit, onDelete, onOpenChordCharts }) 
           onClick={handleDelete}
           className="text-red-500 hover:text-red-400 hover:bg-gray-700"
         >
-          <Trash2 className="h-5 w-5" />
+          <Trash2 className="h-5 w-5" aria-hidden="true" />
+          <span className="sr-only">Delete item</span>
         </Button>
       </div>
     </div>
@@ -228,18 +231,18 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
 
   return (
     <>
-      <Card className="w-full max-w-4xl bg-gray-900 text-gray-100">
+      <Card className="w-full max-w-4xl mx-auto bg-gray-900 text-gray-100">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-2xl">Practice Items</CardTitle>
           <div className="flex items-center space-x-2">
-            <Button 
+            <Button
               className="bg-blue-600 hover:bg-blue-700 text-lg px-4 py-6"
               onClick={() => {
                 setEditingItem(null);
                 setIsEditOpen(true);
               }}
             >
-              <Plus className="mr-2 h-5 w-5" />
+              <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
               Add Item
             </Button>
             <BulkSongbookUpdate onComplete={onItemsChange} />
@@ -247,13 +250,17 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
         </CardHeader>
         <CardContent>
           <div className="mb-6">
+            <label htmlFor="search-items-input" className="sr-only">
+              Search practice items
+            </label>
             <Input
+              id="search-items-input"
               type="text"
               placeholder="Search items..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full text-lg py-6 px-4"
-              autocomplete="off"
+              autoComplete="off"
             />
           </div>
           <DndContext

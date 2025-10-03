@@ -4,9 +4,10 @@ import { trackItemOperation, trackRoutineOperation } from '../utils/analytics';
 import { Button } from '@ui/button';
 import { Input } from '@ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@ui/card';
-import { Plus, Pencil, X, CheckCircle2, GripVertical, Music } from 'lucide-react';
+import { Plus, Pencil, X, CheckCircle2, GripVertical } from 'lucide-react';
 import { RoutineEditor } from './RoutineEditor';
 import ChordChartsModal from './ChordChartsModal';
+import { ChordIcon } from './icons/ChordIcon';
 import {
   DndContext,
   closestCenter,
@@ -66,13 +67,13 @@ const SortableItem = React.memo(({ item, itemDetails, handleOpenChordCharts }) =
         <span className="text-lg">{itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`}</span>
       </div>
       <div className="flex items-center gap-2">
-        <Music
+        <ChordIcon
           className="h-5 w-5 text-blue-400 cursor-pointer hover:text-blue-300"
           onClick={() => handleOpenChordCharts(
             item.routineEntry?.['B'] || item['B'],
             itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`
           )}
-          title="View chord charts"
+          title="Chord charts"
         />
         {(item.routineEntry?.['D'] || item['D']) === 'TRUE' && (
           <CheckCircle2 className="h-5 w-5 text-green-500" />
@@ -120,7 +121,8 @@ const SortableInactiveRoutine = React.memo(({ routine, handleActivateRoutine, ha
           onClick={() => handleActivateRoutine(routine.ID)}
           className="text-green-500 hover:text-green-400"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">Activate routine</span>
         </Button>
         <Button
           variant="ghost"
@@ -128,15 +130,17 @@ const SortableInactiveRoutine = React.memo(({ routine, handleActivateRoutine, ha
           onClick={() => handleEditClick(routine)}
           className="text-blue-500 hover:text-blue-400"
         >
-          <Pencil className="h-4 w-4" />
+          <Pencil className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">Edit routine</span>
         </Button>
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           className="text-red-500 hover:text-red-400"
           onClick={() => handleDeleteClick(routine.ID)}
         >
-          <X className="h-4 w-4" />
+          <X className="h-4 w-4" aria-hidden="true" />
+          <span className="sr-only">Delete routine</span>
         </Button>
       </div>
     </div>
@@ -597,7 +601,7 @@ const RoutinesPage = () => {
 
   if (checking) {
     return (
-      <div className="text-center p-8">
+      <div className="text-center p-8" role="status" aria-live="polite">
         <h2 className="text-2xl mb-4">Checking authentication...</h2>
       </div>
     );
@@ -605,7 +609,7 @@ const RoutinesPage = () => {
 
   if (loading) {
     return (
-      <div className="text-center p-8">
+      <div className="text-center p-8" role="status" aria-live="polite">
         <h2 className="text-2xl mb-4">Loading routines...</h2>
       </div>
     );
@@ -644,7 +648,7 @@ const RoutinesPage = () => {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="flex items-center">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" />
+                      <CheckCircle2 className="h-5 w-5 text-green-500 mr-2" aria-hidden="true" />
                       {activeRoutine.name}
                     </span>
                     <div className="flex space-x-2">
@@ -654,7 +658,8 @@ const RoutinesPage = () => {
                         onClick={() => handleEditClick(activeRoutine)}
                         className="text-blue-500 hover:text-blue-400"
                       >
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" aria-hidden="true" />
+                        <span className="sr-only">Edit routine</span>
                       </Button>
                       <Button
                         variant="ghost"
@@ -662,7 +667,8 @@ const RoutinesPage = () => {
                         onClick={() => handleDeactivateRoutine(activeRoutine.ID)}
                         className="text-gray-400 hover:text-gray-200"
                       >
-                        <X className="h-4 w-4" />
+                        <X className="h-4 w-4" aria-hidden="true" />
+                        <span className="sr-only">Deactivate routine</span>
                       </Button>
                     </div>
                   </div>
@@ -719,19 +725,23 @@ const RoutinesPage = () => {
                 {/* Routines List */}
                 <div className="space-y-2">
                   <div className="mb-4 flex space-x-2">
+                    <label htmlFor="new-routine-name-input" className="sr-only">
+                      New Routine Name
+                    </label>
                     <Input
+                      id="new-routine-name-input"
                       placeholder="New Routine Name"
                       value={newRoutineName}
                       onChange={(e) => setNewRoutineName(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleCreateRoutine()}
                       className="flex-grow"
                     />
-                    <Button 
+                    <Button
                       onClick={handleCreateRoutine}
                       className="bg-blue-600 hover:bg-blue-700"
                       disabled={!newRoutineName.trim()}
                     >
-                      <Plus className="h-5 w-5 mr-2" />
+                      <Plus className="h-5 w-5 mr-2" aria-hidden="true" />
                       Add
                     </Button>
                   </div>
