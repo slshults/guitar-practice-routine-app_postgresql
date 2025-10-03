@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useState, useRef, useMemo, memo } from 'react';
 import { trackChordChartEvent } from '../utils/analytics';
+import { usePracticeItems } from '../hooks/usePracticeItems';
 
 // Simple debounce function
 const debounce = (func, wait) => {
@@ -12,6 +13,46 @@ const debounce = (func, wait) => {
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
   };
+};
+
+// Helper functions for copy modal fuzzy matching (copied from PracticePage)
+const normalizeText = (str) => {
+  return str
+    // Normalize apostrophes and quotes
+    .replace(/[''`"]/g, "'")
+    // Normalize dashes and hyphens
+    .replace(/[–—−]/g, "-")
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+};
+
+const extractBaseSongName = (title) => {
+  // Remove all parentheses and their contents: (acoustic), (electric), (relearning), etc.
+  return title.replace(/\s*\([^)]*\)\s*/g, '').trim();
+};
+
+const findSimilarSongs = (sourceTitle, allItems, sourceItemId) => {
+  const baseName = extractBaseSongName(sourceTitle);
+  const normalizedBaseName = normalizeText(baseName);
+  console.log('DEBUG: findSimilarSongs - sourceTitle:', sourceTitle, '-> baseName:', baseName, '-> normalized:', normalizedBaseName);
+
+  return allItems.filter(item => {
+    // Skip the source item itself
+    if (item['B'] === sourceItemId) return false;
+
+    const itemTitle = item['C'] || '';
+    const itemBaseName = extractBaseSongName(itemTitle);
+    const normalizedItemBaseName = normalizeText(itemBaseName);
+
+    // More precise similarity matching - require significant overlap
+    const matches = normalizedBaseName === normalizedItemBaseName ||
+                   (normalizedBaseName.length > 3 && normalizedItemBaseName.includes(normalizedBaseName)) ||
+                   (normalizedItemBaseName.length > 3 && normalizedBaseName.includes(normalizedItemBaseName));
+
+    return matches;
+  });
 };
 
 import { Button } from '@ui/button';
@@ -207,7 +248,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
   };
 
   return (
-    <div className="relative">
+    <div className="relative mx-auto" style={{ maxWidth: '180px' }}>
       {/* Chord chart display */}
       <div
         className="bg-gray-800 p-1 rounded-lg cursor-pointer relative group"
@@ -287,6 +328,9 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
 });
 
 export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle }) {
+  // Get all items for copy modal
+  const { items: allItems } = usePracticeItems();
+
   // State management - copy all the state from PracticePage that chord charts depend on
   const [chordCharts, setChordCharts] = useState({});
   const [chordSections, setChordSections] = useState({});
@@ -295,6 +339,15 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
   const [insertionContext, setInsertionContext] = useState(null);
   const [scrollBackContext, setScrollBackContext] = useState({});
   const [deletingSection, setDeletingSection] = useState(new Set());
+
+  // Copy modal state (copied from PracticePage)
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copySourceItemId, setCopySourceItemId] = useState(null);
+  const [copySearchTerm, setCopySearchTerm] = useState('');
+  const [selectedTargetItems, setSelectedTargetItems] = useState(new Set());
+  const [itemsWithExistingCharts, setItemsWithExistingCharts] = useState(new Set());
+  const [showOverwriteConfirmation, setShowOverwriteConfirmation] = useState(false);
+  const [copyProgress, setCopyProgress] = useState(null);
 
   // Autocreate states
   const [showAutocreateZone, setShowAutocreateZone] = useState({});
@@ -408,6 +461,22 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
     return () => clearInterval(interval);
   }, [autocreateProgress, processingMessages]);
 
+  // Copy modal: Detect items with existing charts when selection changes (copied from PracticePage)
+  useEffect(() => {
+    if (!showCopyModal || selectedTargetItems.size === 0) return;
+
+    const newItemsWithCharts = new Set();
+    selectedTargetItems.forEach(primaryKey => {
+      const targetItem = allItems?.find(item => item['A'] === primaryKey);
+      const itemReferenceId = targetItem?.['B'];
+      if (itemReferenceId && chordCharts[itemReferenceId]?.length > 0) {
+        newItemsWithCharts.add(primaryKey);
+      }
+    });
+
+    setItemsWithExistingCharts(newItemsWithCharts);
+  }, [showCopyModal, selectedTargetItems, chordCharts, allItems]);
+
   // Copy all the chord chart functions from PracticePage...
   const loadChordChartsForItem = async (itemId) => {
     // Always fetch fresh data to ensure UI is up-to-date after autocreate
@@ -459,6 +528,63 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
     const charts = chordCharts[itemId] || [];
     return buildSectionsFromCharts(charts);
   };
+
+  // Copy modal: Memoized similar items calculation (copied from PracticePage)
+  const similarItemIds = useMemo(() => {
+    if (!copySourceItemId || !allItems) return new Set();
+
+    const sourceItem = allItems.find(item => item['B'] === copySourceItemId);
+    const sourceTitle = sourceItem?.['C'] || '';
+    const allFilteredItems = allItems.filter(item => item['B'] !== copySourceItemId);
+
+    return new Set(
+      findSimilarSongs(sourceTitle, allFilteredItems, copySourceItemId).map(item => item['A'])
+    );
+  }, [copySourceItemId, allItems]);
+
+  // Copy modal: Memoized filtered and sorted items (copied from PracticePage)
+  const sortedAndFilteredItems = useMemo(() => {
+    if (!allItems) return [];
+
+    return allItems
+      .filter(item => {
+        // Filter out the source item
+        if (item['B'] === copySourceItemId) return false;
+
+        // Filter by search term
+        if (copySearchTerm.trim()) {
+          const title = item['C'] || '';
+          const normalizedTitle = normalizeText(title);
+          const normalizedSearch = normalizeText(copySearchTerm);
+
+          if (!normalizedSearch) return true;
+          return normalizedTitle.includes(normalizedSearch);
+        }
+
+        return true;
+      })
+      .sort((a, b) => {
+        // If there's an active search term, only sort alphabetically
+        if (copySearchTerm.trim()) {
+          const aTitle = a['C'] || '';
+          const bTitle = b['C'] || '';
+          return aTitle.localeCompare(bTitle);
+        }
+
+        // Check if items are similar to source
+        const aIsSimilar = similarItemIds.has(a['A']);
+        const bIsSimilar = similarItemIds.has(b['A']);
+
+        // Sort similar songs to the top
+        if (aIsSimilar && !bIsSimilar) return -1;
+        if (!aIsSimilar && bIsSimilar) return 1;
+
+        // Within each group, sort alphabetically
+        const aTitle = a['C'] || '';
+        const bTitle = b['C'] || '';
+        return aTitle.localeCompare(bTitle);
+      });
+  }, [allItems, copySourceItemId, copySearchTerm, similarItemIds]);
 
   // Debounced update function for section metadata
   const debouncedUpdateSection = useMemo(
@@ -621,9 +747,22 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
     setInsertionContext(null);
     setScrollBackContext({
       itemId: itemId,
+      chordId: chordId,
       scrollPosition: window.scrollY
     });
     setShowChordEditor(prev => ({ ...prev, [itemId]: true }));
+
+    // Auto-scroll to the chord editor after it opens (keep chord name field visible at top)
+    setTimeout(() => {
+      const editorElement = document.querySelector(`[data-editor-for-item="${itemId}"]`);
+      if (editorElement) {
+        editorElement.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'nearest'
+        });
+      }
+    }, 100); // Small delay to ensure the editor has rendered
   };
 
   const handleDeleteChordChart = async (itemId, chordId) => {
@@ -670,16 +809,32 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
   const handleSaveChordChart = async (itemId, chartData) => {
     try {
-      const isUpdate = !!editingChordId;
+      serverDebug('handleSaveChordChart called', { editingChordId, chartData });
+      const isUpdate = !!editingChordId; // Check state variable to determine if we're editing
+      serverDebug('isUpdate check result', { isUpdate, editingChordId });
 
-      // Build chart data with section metadata
-      const chartDataWithSection = {
-        title: chartData.title,
-        chord_data: chartData.chord_data
-      };
+      // Build chart data - spread all properties (backend will build chord_data object from flattened format)
+      let chartDataWithSection = { ...chartData };
 
-      // Determine target section for new chords or insertions
-      if (!isUpdate || insertionContext) {
+      if (isUpdate) {
+        // For updates, preserve the original chord's section information (copied from PracticePage)
+        const originalChord = (chordCharts[itemId] || []).find(chord => chord.id === editingChordId);
+
+        // Add section metadata to preserve original section
+        chartDataWithSection.sectionId = originalChord?.sectionId;
+        chartDataWithSection.sectionLabel = originalChord?.sectionLabel;
+        chartDataWithSection.sectionRepeatCount = originalChord?.sectionRepeatCount;
+
+        serverDebug('Updating chord, preserving section', {
+          originalSection: {
+            id: originalChord?.sectionId,
+            label: originalChord?.sectionLabel,
+            repeatCount: originalChord?.sectionRepeatCount
+          }
+        });
+
+      } else {
+        // For new chords, determine target section
         const itemSections = chordSections[itemId] || [];
         let targetSection;
 
@@ -787,12 +942,23 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
   };
 
   const scrollBackToChord = () => {
-    if (scrollBackContext.itemId && scrollBackContext.scrollPosition !== undefined) {
+    if (scrollBackContext.itemId && scrollBackContext.chordId) {
       setTimeout(() => {
-        window.scrollTo({
-          top: scrollBackContext.scrollPosition,
-          behavior: 'smooth'
-        });
+        // Try to find the specific chord chart element first
+        const chordElement = document.querySelector(`[data-chord-id="${scrollBackContext.chordId}"]`);
+        if (chordElement) {
+          chordElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center',
+            inline: 'nearest'
+          });
+        } else if (scrollBackContext.scrollPosition !== undefined) {
+          // Fallback to original scroll position
+          window.scrollTo({
+            top: scrollBackContext.scrollPosition,
+            behavior: 'smooth'
+          });
+        }
         setScrollBackContext({});
       }, 100);
     }
@@ -1349,13 +1515,150 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
   };
 
   const handleOpenCopyFromModal = (itemId) => {
-    // This would open a modal to copy FROM other songs
+    // TODO: Implement copy FROM modal (not included in this update)
     console.log('Open copy from modal for item:', itemId);
   };
 
-  const handleOpenCopyModal = (itemId) => {
-    // This would open a modal to copy TO other songs
-    console.log('Open copy to modal for item:', itemId);
+  // Copy modal: Open copy TO modal (copied from PracticePage)
+  const handleOpenCopyModal = async (itemId) => {
+    console.log('Opening copy modal for item:', itemId);
+    setCopySourceItemId(itemId);
+
+    // Get source item details for fuzzy matching
+    const sourceItem = allItems?.find(item => item['B'] === itemId);
+    const sourceTitle = sourceItem?.['C'] || '';
+
+    // Find similar songs first
+    const similarSongs = findSimilarSongs(sourceTitle, allItems, itemId);
+    console.log('Source:', sourceTitle);
+    console.log('Found similar songs:', similarSongs.map(s => s['C']));
+
+    // Load chord charts for source + similar songs
+    const itemsToLoad = [itemId, ...similarSongs.map(s => s['B'])];
+    console.log('Loading chord charts for relevant items:', itemsToLoad.length, 'items');
+
+    for (const id of itemsToLoad) {
+      try {
+        const response = await fetch(`/api/items/${id}/chord-charts`);
+        if (response.ok) {
+          const charts = await response.json();
+          setChordCharts(prev => ({ ...prev, [id]: charts }));
+          console.log(`Loaded ${charts.length} charts for item ${id}`);
+        }
+      } catch (error) {
+        console.error(`Error loading chord charts for item ${id}:`, error);
+      }
+    }
+
+    setShowCopyModal(true);
+    setCopySearchTerm('');
+    setSelectedTargetItems(new Set());
+    setCopyProgress(null);
+  };
+
+  // Copy modal: Close modal (copied from PracticePage)
+  const handleCloseCopyModal = () => {
+    setShowCopyModal(false);
+    setCopySourceItemId(null);
+    setCopySearchTerm('');
+    setSelectedTargetItems(new Set());
+    setItemsWithExistingCharts(new Set());
+    setShowOverwriteConfirmation(false);
+    setCopyProgress(null);
+  };
+
+  // Copy modal: Toggle target item selection (copied from PracticePage)
+  const handleToggleTargetItem = (itemPrimaryKey) => {
+    setSelectedTargetItems(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(itemPrimaryKey)) {
+        newSet.delete(itemPrimaryKey);
+      } else {
+        newSet.add(itemPrimaryKey);
+        // Lazy load chord charts for overwrite detection
+        const targetItem = allItems?.find(item => item['A'] === itemPrimaryKey);
+        const itemReferenceId = targetItem?.['B'];
+        if (itemReferenceId) {
+          loadChordChartsForItem(itemReferenceId);
+        }
+      }
+      return newSet;
+    });
+  };
+
+  // Copy modal: Confirm copy operation (copied from PracticePage)
+  const handleConfirmCopy = async () => {
+    console.log('handleConfirmCopy called', { copySourceItemId, selectedTargetItems: Array.from(selectedTargetItems) });
+    if (!copySourceItemId || selectedTargetItems.size === 0) {
+      console.log('Early return: missing source or targets');
+      return;
+    }
+
+    // If there are overwrites and we haven't confirmed yet, show confirmation
+    if (itemsWithExistingCharts.size > 0 && !showOverwriteConfirmation) {
+      console.log('Showing overwrite confirmation, items with existing charts:', itemsWithExistingCharts.size);
+      setShowOverwriteConfirmation(true);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/chord-charts/copy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          source_item_id: copySourceItemId,
+          target_item_ids: Array.from(selectedTargetItems).map(primaryKey => {
+            const targetItem = allItems?.find(item => item['A'] === primaryKey);
+            return targetItem?.['B'];
+          }).filter(Boolean)
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to copy chord charts: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('Chord charts copied successfully:', result);
+
+      // Set copy progress to complete
+      setCopyProgress('complete');
+
+      // Force refresh chord charts for all affected items
+      const targetItemIds = Array.from(selectedTargetItems).map(primaryKey => {
+        const targetItem = allItems?.find(item => item['A'] === primaryKey);
+        return targetItem?.['B'];
+      }).filter(Boolean);
+      const affectedItems = [copySourceItemId, ...targetItemIds];
+      console.log('[DEBUG COPY] About to refresh chord charts for affected items:', affectedItems);
+
+      for (const itemIdToRefresh of affectedItems) {
+        try {
+          const refreshResponse = await fetch(`/api/items/${itemIdToRefresh}/chord-charts`);
+          if (refreshResponse.ok) {
+            const charts = await refreshResponse.json();
+
+            console.log('[DEBUG COPY] Updating chordCharts state for item', itemIdToRefresh, 'with', charts.length, 'charts');
+            setChordCharts(prev => ({
+              ...prev,
+              [itemIdToRefresh]: charts
+            }));
+
+            // Build sections from loaded chord charts
+            setChordSections(prev => ({
+              ...prev,
+              [itemIdToRefresh]: buildSectionsFromCharts(charts)
+            }));
+          }
+        } catch (error) {
+          console.error(`Error refreshing chord charts for item ${itemIdToRefresh}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('Error copying chord charts:', error);
+    }
   };
 
   if (!isOpen) return null;
@@ -1363,7 +1666,8 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
   const itemReferenceId = itemId;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <>
+    <Dialog open={isOpen && !showCopyModal} onOpenChange={onClose}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1916,7 +2220,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                     variant="default"
                     onClick={() => handleOpenCopyModal(itemReferenceId)}
                     disabled={!chordCharts[itemReferenceId] || chordCharts[itemReferenceId].length === 0}
-                    className="w-full sm:w-1/2 bg-purple-700 text-purple-300 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full sm:w-1/2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Copy chord charts to other song
                   </Button>
@@ -2043,5 +2347,139 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
         />
       </DialogContent>
     </Dialog>
+
+    {/* Copy Chord Charts Modal (copied from PracticePage) */}
+    {showCopyModal && (
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100]"
+        onClick={handleCloseCopyModal}
+      >
+        <div
+          className={`bg-gray-700 rounded-lg p-6 ${showOverwriteConfirmation || copyProgress === 'complete' ? 'max-w-xs' : 'w-full max-w-md'} max-h-[80vh] flex flex-col`}
+          onClick={(e) => e.stopPropagation()}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          {copyProgress === 'complete' ? (
+            <>
+              <h2 className="text-xl font-bold text-white mb-4">
+                Success!
+              </h2>
+              <div className="flex items-center justify-center space-x-2 mb-4">
+                <Check className="h-6 w-6 text-green-500" />
+                <span className="text-green-400 text-lg">Chord charts copied successfully!</span>
+              </div>
+              <Button
+                onClick={handleCloseCopyModal}
+                className="w-full bg-green-600 hover:bg-green-700"
+              >
+                Done
+              </Button>
+            </>
+          ) : !showOverwriteConfirmation ? (
+            <>
+              <h2 className="text-xl font-bold text-white mb-4">
+                Copy Chord Charts
+              </h2>
+
+              <p className="text-gray-300 mb-2">
+                Copy chord charts from "{allItems?.find(item => item['B'] === copySourceItemId)?.['C'] || 'Unknown Song'}" to:
+              </p>
+
+              {/* Search field */}
+              <input
+                type="text"
+                placeholder="Search songs..."
+                value={copySearchTerm}
+                onChange={(e) => setCopySearchTerm(e.target.value)}
+                className="w-full p-2 mb-4 bg-gray-700 text-white rounded border border-gray-600 focus:border-purple-500"
+              />
+
+              {/* Scrollable song list */}
+              <div className="flex-1 overflow-y-auto mb-4 min-h-0 modal-scroll">
+                {sortedAndFilteredItems.map(item => (
+                  <div key={item['A']} className="flex items-center mb-2">
+                    <input
+                      type="checkbox"
+                      id={`copy-item-${item['A']}`}
+                      checked={selectedTargetItems.has(item['A'])}
+                      onChange={() => handleToggleTargetItem(item['A'])}
+                      className="mr-3"
+                    />
+                    <label
+                      htmlFor={`copy-item-${item['A']}`}
+                      className="text-white cursor-pointer flex-1 flex items-center"
+                    >
+                      <span>{item['C'] || 'Untitled'}</span>
+                      {itemsWithExistingCharts.has(item['A']) && (
+                        <span className="text-yellow-400 ml-2 text-sm"> ⚠️will overwrite</span>
+                      )}
+                    </label>
+                  </div>
+                ))}
+              </div>
+
+              {/* Modal buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handleCloseCopyModal}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmCopy}
+                  disabled={selectedTargetItems.size === 0}
+                  style={selectedTargetItems.size === 0 ? {
+                    backgroundColor: '#4b5563',
+                    color: '#d1d5db',
+                    opacity: '1'
+                  } : itemsWithExistingCharts.size > 0 ? {
+                    backgroundColor: '#dc2626',
+                    color: '#ffffff',
+                    opacity: '1'
+                  } : {
+                    backgroundColor: '#5b1f1f',
+                    color: '#ffffff',
+                    opacity: '1'
+                  }}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:cursor-not-allowed"
+                >
+                  {itemsWithExistingCharts.size > 0
+                    ? `Copy and Overwrite ${selectedTargetItems.size} song${selectedTargetItems.size !== 1 ? 's' : ''}`
+                    : `Copy to ${selectedTargetItems.size} song${selectedTargetItems.size !== 1 ? 's' : ''}`
+                  }
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-white mb-4">
+                ⚠️ Confirm Overwrite
+              </h2>
+              <p className="text-gray-300 mb-4">
+                This will overwrite existing chord charts on {itemsWithExistingCharts.size} song{itemsWithExistingCharts.size !== 1 ? 's' : ''}. Continue?
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowOverwriteConfirmation(false)}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleConfirmCopy}
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                >
+                  Overwrite
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }

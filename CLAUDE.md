@@ -64,7 +64,7 @@ This is IMPORTANT for managing rate-limiting and billing efficiency. **Sonnet 4 
 ### Claude 4 Prompt Engineering Best Practices
 
 #### Multi-Context Window Workflows
-When the context-window remaining gets down to 5%, or when your tasks for your next turn would be likely to drop the remaining window below 5%, then save your current progress and state to memory before the context window refreshes. Use as much of the remaining context window as possible before saving, and let me know how much of the context window is remaining at that time.
+When the context-window remaining gets down to 12%, or when your tasks for your next turn would be likely to drop the remaining window below 12%, then save your current progress and state to memory before the context window refreshes. Use as much of the remaining context window as possible before saving, and let me know how much of the context window is remaining at that time.
 
 #### State Management Best Practices
 - After completing a task that involves tool use, provide a quick summary of the work you've done

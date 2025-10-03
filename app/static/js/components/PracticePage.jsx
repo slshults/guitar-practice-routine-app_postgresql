@@ -1552,13 +1552,14 @@ export const PracticePage = () => {
   const handleSaveChordChart = async (itemId, chartData) => {
     try {
       serverInfo('Saving chord chart for item', { itemId, chartData });
-      
+      serverDebug('PracticePage handleSaveChordChart called', { editingChordId, chartData });
+
       // Determine if we're creating or updating
       const isUpdate = chartData.editingChordId;
-      let chartDataWithSection;
-      
-      // Initialize without line break updater by default
-      chartDataWithSection = { ...chartData };
+      serverDebug('PracticePage isUpdate check result', { isUpdate, editingChordIdFromState: editingChordId, editingChordIdFromChartData: chartData.editingChordId });
+
+      // Build chart data - spread all properties flat (backend builds chord_data from flattened format)
+      let chartDataWithSection = { ...chartData };
       
       if (isUpdate) {
         // For updates, preserve the original chord's section information
@@ -1993,13 +1994,13 @@ export const PracticePage = () => {
     // We'll need to pass this to the ChordChartEditor component
     setEditingChordId(chordId);
 
-    // Auto-scroll to the chord editor after it opens
+    // Auto-scroll to the chord editor after it opens (keep chord name field visible at top)
     setTimeout(() => {
       const editorElement = document.querySelector(`[data-editor-for-item="${itemId}"]`);
       if (editorElement) {
         editorElement.scrollIntoView({
           behavior: 'smooth',
-          block: 'start',
+          block: 'center',
           inline: 'nearest'
         });
       }
