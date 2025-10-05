@@ -67,14 +67,18 @@ const SortableItem = React.memo(({ item, itemDetails, handleOpenChordCharts }) =
         <span className="text-lg">{itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`}</span>
       </div>
       <div className="flex items-center gap-2">
-        <ChordIcon
-          className="h-5 w-5 text-blue-400 cursor-pointer hover:text-blue-300"
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => handleOpenChordCharts(
             item.routineEntry?.['B'] || item['B'],
             itemDetails?.['C'] || `Item ${item.routineEntry?.['B'] || item['B']}`
           )}
-          title="Chord charts"
-        />
+          className="text-blue-400 hover:text-blue-300 hover:bg-gray-700 h-8 w-8"
+        >
+          <ChordIcon className="h-5 w-5" />
+          <span className="sr-only">Chord charts</span>
+        </Button>
         {(item.routineEntry?.['D'] || item['D']) === 'TRUE' && (
           <CheckCircle2 className="h-5 w-5 text-green-500" />
         )}

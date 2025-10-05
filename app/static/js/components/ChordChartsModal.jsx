@@ -1668,7 +1668,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
   return (
     <>
     <Dialog open={isOpen && !showCopyModal} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Music className="h-5 w-5" />
@@ -1836,17 +1836,34 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                   if (existingCharts.length === 0) {
                     // No existing charts - show expandable autocreate
                     return (
-                      <div className="w-full mb-4">
-                        <Button
-                          onClick={() => setShowAutocreateZone(prev => ({
-                            ...prev,
-                            [itemReferenceId]: !prev[itemReferenceId]
-                          }))}
-                          className="w-full bg-gray-700 text-gray-300 hover:bg-gray-600 mb-2 flex items-center justify-center"
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Autocreate Chord Charts
-                        </Button>
+                      <div className="mb-4">
+                        {zoneExpanded ? (
+                          <Button
+                            onClick={() => setShowAutocreateZone(prev => ({
+                              ...prev,
+                              [itemReferenceId]: false
+                            }))}
+                            variant="ghost"
+                            size="sm"
+                            className="text-gray-400 hover:text-gray-300 mb-2"
+                            title="Collapse autocreate section"
+                          >
+                            ←
+                          </Button>
+                        ) : (
+                          <div className="flex justify-center">
+                            <Button
+                              onClick={() => setShowAutocreateZone(prev => ({
+                                ...prev,
+                                [itemReferenceId]: true
+                              }))}
+                              className="max-w-md bg-gray-700 text-gray-300 hover:bg-gray-600 mb-2 flex items-center justify-center"
+                            >
+                              <Upload className="h-4 w-4 mr-2" />
+                              Autocreate Chord Charts
+                            </Button>
+                          </div>
+                        )}
 
                         {zoneExpanded && (
                           <div className="border border-gray-600/30 rounded-lg p-4 bg-gray-800/10">
@@ -2167,52 +2184,58 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                   } else {
                     // Has existing charts - show replace option
                     return (
-                      <Button
-                        variant="outline"
-                        onClick={() => handleAutocreateClick(itemReferenceId)}
-                        className="w-full mb-4 text-orange-300 hover:bg-orange-800 hover:border-orange-600"
-                      >
-                        <Upload className="h-4 w-4 mr-2" />
-                        Replace with autocreated charts
-                      </Button>
+                      <div className="mb-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          onClick={() => handleAutocreateClick(itemReferenceId)}
+                          className="max-w-md text-orange-300 hover:bg-orange-800 hover:border-orange-600"
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          Replace with autocreated charts
+                        </Button>
+                      </div>
                     );
                   }
                 })()}
 
-                <Button
-                  variant="default"
-                  onClick={() => {
-                    setScrollBackContext({
-                      itemId: itemReferenceId,
-                      scrollPosition: window.scrollY
-                    });
-                    setShowChordEditor(prev => ({ ...prev, [itemReferenceId]: true }));
-                    setTimeout(() => {
-                      const editorElement = document.querySelector(`[data-editor-for-item="${itemReferenceId}"]`);
-                      if (editorElement) {
-                        editorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }
-                    }, 100);
-                  }}
-                  className="w-full mb-4"
-                >
-                  + Add New Chord
-                </Button>
+                <div className="mb-4 flex justify-center">
+                  <Button
+                    variant="default"
+                    onClick={() => {
+                      setScrollBackContext({
+                        itemId: itemReferenceId,
+                        scrollPosition: window.scrollY
+                      });
+                      setShowChordEditor(prev => ({ ...prev, [itemReferenceId]: true }));
+                      setTimeout(() => {
+                        const editorElement = document.querySelector(`[data-editor-for-item="${itemReferenceId}"]`);
+                        if (editorElement) {
+                          editorElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                      }, 100);
+                    }}
+                    className="min-w-48"
+                  >
+                    + Add New Chord
+                  </Button>
+                </div>
 
-                <Button
-                  variant="default"
-                  onClick={() => addNewSection(itemReferenceId)}
-                  className="w-full mb-4"
-                >
-                  + Add New Section
-                </Button>
+                <div className="mb-4 flex justify-center">
+                  <Button
+                    variant="default"
+                    onClick={() => addNewSection(itemReferenceId)}
+                    className="min-w-48"
+                  >
+                    + Add New Section
+                  </Button>
+                </div>
 
                 {/* Copy buttons - responsive: side-by-side on desktop, stacked on mobile */}
-                <div className="flex flex-col sm:flex-row gap-2 mb-4 w-full">
+                <div className="flex flex-col sm:flex-row gap-2 mb-4 max-w-2xl mx-auto">
                   <Button
                     variant="default"
                     onClick={() => handleOpenCopyFromModal(itemReferenceId)}
-                    className="w-full sm:w-1/2"
+                    className="flex-1"
                   >
                     Copy chord charts from other song
                   </Button>
@@ -2220,7 +2243,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                     variant="default"
                     onClick={() => handleOpenCopyModal(itemReferenceId)}
                     disabled={!chordCharts[itemReferenceId] || chordCharts[itemReferenceId].length === 0}
-                    className="w-full sm:w-1/2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Copy chord charts to other song
                   </Button>
@@ -2368,12 +2391,14 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                 <Check className="h-6 w-6 text-green-500" />
                 <span className="text-green-400 text-lg">Chord charts copied successfully!</span>
               </div>
-              <Button
-                onClick={handleCloseCopyModal}
-                className="w-full bg-green-600 hover:bg-green-700"
-              >
-                Done
-              </Button>
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleCloseCopyModal}
+                  className="min-w-24 bg-green-600 hover:bg-green-700"
+                >
+                  Done
+                </Button>
+              </div>
             </>
           ) : !showOverwriteConfirmation ? (
             <>
@@ -2419,11 +2444,11 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
               </div>
 
               {/* Modal buttons */}
-              <div className="flex gap-2">
+              <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
                   onClick={handleCloseCopyModal}
-                  className="flex-1"
+                  className="min-w-24"
                 >
                   Cancel
                 </Button>
@@ -2443,7 +2468,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                     color: '#ffffff',
                     opacity: '1'
                   }}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:cursor-not-allowed"
+                  className="bg-purple-600 hover:bg-purple-700 disabled:cursor-not-allowed"
                 >
                   {itemsWithExistingCharts.size > 0
                     ? `Copy and Overwrite ${selectedTargetItems.size} song${selectedTargetItems.size !== 1 ? 's' : ''}`
@@ -2460,17 +2485,17 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
               <p className="text-gray-300 mb-4">
                 This will overwrite existing chord charts on {itemsWithExistingCharts.size} song{itemsWithExistingCharts.size !== 1 ? 's' : ''}. Continue?
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 justify-end">
                 <Button
                   variant="outline"
                   onClick={() => setShowOverwriteConfirmation(false)}
-                  className="flex-1"
+                  className="min-w-24"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={handleConfirmCopy}
-                  className="flex-1 bg-red-600 hover:bg-red-700"
+                  className="min-w-24 bg-red-600 hover:bg-red-700"
                 >
                   Overwrite
                 </Button>
