@@ -61,17 +61,17 @@ const SortableItem = React.memo(({ item, onEdit, onDelete, onOpenChordCharts }) 
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center justify-between p-5 rounded-lg ${
+      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-5 rounded-lg gap-3 ${
         isDragging ? 'bg-gray-700' : 'bg-gray-800'
       }`}
     >
-      <div className="flex items-center">
-        <div {...attributes} {...listeners}>
-          <GripVertical className="h-6 w-6 text-gray-500 mr-4 cursor-move" />
+      <div className="flex items-center min-w-0 flex-1">
+        <div {...attributes} {...listeners} className="flex-shrink-0">
+          <GripVertical className="h-6 w-6 text-gray-500 mr-2 sm:mr-4 cursor-move" />
         </div>
-        <span className="text-xl">{item['C']}</span>
+        <span className="text-base sm:text-xl">{item['C']}</span>
       </div>
-      <div className="flex space-x-3">
+      <div className="flex space-x-3 justify-end sm:justify-start flex-shrink-0">
         <Button
           variant="ghost"
           size="lg"

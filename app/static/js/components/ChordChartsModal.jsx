@@ -1668,7 +1668,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
   return (
     <>
     <Dialog open={isOpen && !showCopyModal} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Music className="h-5 w-5" />
@@ -1773,12 +1773,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                     return chordRows.map((row, rowIndex) => (
                       <div
                         key={rowIndex}
-                        className="grid grid-cols-5 gap-2"
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(5, 1fr)',
-                          gap: '0.5rem'
-                        }}
+                        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2"
                       >
                         {row.map(chart => (
                           <MemoizedChordChart
