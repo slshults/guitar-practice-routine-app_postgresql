@@ -451,7 +451,12 @@ export const PracticePage = () => {
 
   // No chord names found modal state
   const [showNoChordNamesModal, setShowNoChordNamesModal] = useState(false);
-  
+
+  // Notification state - use ref for immediate updates
+  const notifyOnCompleteRef = useRef({});
+  const [notificationConfirmMessage, setNotificationConfirmMessage] = useState(null);
+  const [originalTitle, setOriginalTitle] = useState(null);
+
   // Rotating processing messages for entertainment
   const processingMessages = [
     "✨ Claude is making magic happen",
@@ -471,8 +476,87 @@ export const PracticePage = () => {
     "Teaching AI to read guitar tabs is harder than teaching humans, surprisingly",
     "Processing at the speed of artisanal chord crafting",
     "Your patience is being converted into beautiful chord diagrams",
-    "Still faster than drawing the chord charts by hand"
+    "Still faster than drawing the chord charts by hand",
+    "Fun fact: I process thousands of tokens per second, but this still takes a while. Go figure.",
+    "At least you're not on hold listening to elevator music right now",
+    "I'd apologize for the wait, but I'm kinda busy with building your chord charts"
   ];
+
+  // Request notification permission and set up completion notification
+  const handleNotifyRequest = async (itemId) => {
+    console.log('[NOTIFY] Notification button clicked for itemId:', itemId);
+
+    // Always enable title notification - use ref for immediate updates
+    notifyOnCompleteRef.current[itemId] = true;
+    setNotificationConfirmMessage(itemId);
+    console.log('[NOTIFY] Notification enabled for itemId:', itemId);
+    console.log('[NOTIFY] Current ref state:', notifyOnCompleteRef.current);
+
+    // Clear the confirmation message after 10 seconds
+    setTimeout(() => {
+      setNotificationConfirmMessage(null);
+    }, 10000);
+
+    // Also request browser notification permission if supported
+    if ('Notification' in window && Notification.permission === 'default') {
+      try {
+        console.log('[NOTIFY] Requesting browser notification permission...');
+        await Notification.requestPermission();
+      } catch (error) {
+        console.error('[NOTIFY] Error requesting notification permission:', error);
+      }
+    }
+  };
+
+  // Send notification when charts are ready (browser notification + title flash)
+  const sendCompletionNotification = (itemName) => {
+    console.log('[NOTIFY] Attempting to send notification for:', itemName);
+
+    // Change page title to notify user
+    if (!originalTitle) {
+      setOriginalTitle(document.title);
+    }
+    document.title = '🎸 Chord charts ready!';
+    console.log('[NOTIFY] Changed title to: Chord charts ready!');
+
+    // Also try browser notification if supported
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        console.log('[NOTIFY] Creating browser notification...');
+        new Notification('Chord charts ready! 🎸', {
+          body: `Your chord charts for "${itemName}" are finally ready!`,
+          icon: '/static/favicon.ico',
+          tag: 'chord-charts-ready'
+        });
+        console.log('[NOTIFY] Browser notification created successfully');
+      } catch (error) {
+        console.error('[NOTIFY] Error sending browser notification:', error);
+      }
+    }
+  };
+
+  // Restore original title on any user interaction
+  const restoreTitle = useCallback(() => {
+    if (originalTitle) {
+      document.title = originalTitle;
+      setOriginalTitle(null);
+      console.log('[NOTIFY] Restored original title');
+    }
+  }, [originalTitle]);
+
+  // Add click listener to restore title on any user interaction
+  useEffect(() => {
+    if (originalTitle) {
+      const handleClick = () => restoreTitle();
+      document.addEventListener('click', handleClick);
+      document.addEventListener('keydown', handleClick);
+
+      return () => {
+        document.removeEventListener('click', handleClick);
+        document.removeEventListener('keydown', handleClick);
+      };
+    }
+  }, [originalTitle, restoreTitle]);
 
   // Helper function to group chords into sections based on persisted metadata
   const getChordSections = (itemId) => {
@@ -2930,13 +3014,24 @@ export const PracticePage = () => {
       if (result.success) {
         console.log(`[AUTOCREATE] Processing successful, setting state to complete`);
         setAutocreateProgress({ [itemId]: 'complete' });
-        
+
+        // Get item details once for reuse
+        const itemDetails = getItemDetails(itemId);
+        const itemName = itemDetails?.['C'] || `Item ${itemId}`;
+
+        // Send notification if user requested it
+        console.log('[NOTIFY] Checking notification request for itemId:', itemId);
+        console.log('[NOTIFY] notifyOnComplete ref:', notifyOnCompleteRef.current);
+        if (notifyOnCompleteRef.current[itemId]) {
+          console.log('[NOTIFY] User requested notification, sending...');
+          sendCompletionNotification(itemName);
+        } else {
+          console.log('[NOTIFY] No notification requested for this item');
+        }
+
         // Track autocreate chord charts success
         const routineItem = routine.items.find(item => item['B'] === itemId);
         if (routineItem) {
-          const itemDetails = getItemDetails(itemId);
-          const itemName = itemDetails?.['C'] || `Item ${itemId}`; // Column C is Title
-          
           trackChordChartEvent('autocreated', itemName, {
             file_count: files?.length || 0,
             content_type: contentType || 'mixed',
@@ -2945,8 +3040,6 @@ export const PracticePage = () => {
         }
 
         // Show success modal for visual analysis (more complex processing)
-        const itemDetails = getItemDetails(itemId);
-        const itemName = itemDetails?.['C'] || `Item ${itemId}`;
         setAutocreateSuccessData({
           itemName,
           chordCount: result.chord_count || 0,
@@ -3074,13 +3167,24 @@ export const PracticePage = () => {
       }
       
       setAutocreateProgress({ [itemId]: 'complete' });
-      
+
+      // Get item details once for reuse
+      const itemDetails = getItemDetails(itemId);
+      const itemName = itemDetails?.['C'] || `Item ${itemId}`;
+
+      // Send notification if user requested it
+      console.log('[NOTIFY] Checking notification request for itemId (direct flow):', itemId);
+      console.log('[NOTIFY] notifyOnComplete ref (direct flow):', notifyOnCompleteRef.current);
+      if (notifyOnCompleteRef.current[itemId]) {
+        console.log('[NOTIFY] User requested notification (direct flow), sending...');
+        sendCompletionNotification(itemName);
+      } else {
+        console.log('[NOTIFY] No notification requested for this item (direct flow)');
+      }
+
       // Track autocreate chord charts success (direct upload flow)
       const routineItem = routine.items.find(item => item['B'] === itemId);
       if (routineItem) {
-        const itemDetails = getItemDetails(itemId);
-        const itemName = itemDetails?.['C'] || `Item ${itemId}`; // Column C is Title
-        
         trackChordChartEvent('autocreated', itemName, {
           file_count: result.file_count || 0,
           content_type: result.content_type || 'auto-detected',
@@ -3089,8 +3193,6 @@ export const PracticePage = () => {
       }
 
       // Show success modal for visual analysis (more complex processing)
-      const itemDetails = getItemDetails(itemId);
-      const itemName = itemDetails?.['C'] || `Item ${itemId}`;
       setAutocreateSuccessData({
         itemName,
         chordCount: result.chord_count || 0,
@@ -3848,23 +3950,43 @@ export const PracticePage = () => {
                                               )}
                                               {progress === 'processing' && (
                                                 <div className="space-y-3" role="status" aria-live="polite">
-                                                  <div className="flex items-center justify-center space-x-2">
-                                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500" aria-hidden="true"></div>
-                                                    <div className="flex items-center">
-                                                      <span className="text-white">{processingMessages[processingMessageIndex]}</span>
-                                                      <div className="ml-2 animate-spin" aria-hidden="true">⚙️</div>
+                                                  {notificationConfirmMessage === itemReferenceId ? (
+                                                    <div className="text-center space-y-3">
+                                                      <div className="text-green-400 text-sm">
+                                                        ✅ Got it, you can go do stuff in other tabs, we'll notify you when the charts are ready
+                                                      </div>
                                                     </div>
-                                                  </div>
+                                                  ) : (
+                                                    <div className="flex items-center justify-center space-x-2">
+                                                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500" aria-hidden="true"></div>
+                                                      <div className="flex items-center">
+                                                        <span className="text-white">{processingMessages[processingMessageIndex]}</span>
+                                                        <div className="ml-2 animate-spin" aria-hidden="true">⚙️</div>
+                                                      </div>
+                                                    </div>
+                                                  )}
                                                   <br />
-                                                  <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() => handleShowCancelConfirmation(itemReferenceId)}
-                                                    className="text-gray-400 hover:text-gray-200 border-gray-600"
-                                                  >
-                                                    <X className="h-3 w-3 mr-1" />
-                                                    Cancel
-                                                  </Button>
+                                                  <div className="flex gap-2 justify-center">
+                                                    {!notifyOnCompleteRef.current[itemReferenceId] && !notificationConfirmMessage && (
+                                                      <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleNotifyRequest(itemReferenceId)}
+                                                        className="text-blue-400 hover:text-blue-300 border-blue-600"
+                                                      >
+                                                        🔔 Notify me when ready
+                                                      </Button>
+                                                    )}
+                                                    <Button
+                                                      variant="outline"
+                                                      size="sm"
+                                                      onClick={() => handleShowCancelConfirmation(itemReferenceId)}
+                                                      className="text-gray-400 hover:text-gray-200 border-gray-600"
+                                                    >
+                                                      <X className="h-3 w-3 mr-1" />
+                                                      Cancel
+                                                    </Button>
+                                                  </div>
                                                 </div>
                                               )}
                                               {progress === 'complete' && (
