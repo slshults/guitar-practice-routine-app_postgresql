@@ -49,7 +49,7 @@ export const NoteEditor = ({ open, onOpenChange, itemId, currentNote = '', onNot
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl bg-gray-800">
         <DialogHeader>
-          <DialogTitle>Edit Note</DialogTitle>
+          <DialogTitle>Edit note</DialogTitle>
           <DialogDescription>
             Add or edit your practice notes
           </DialogDescription>
@@ -74,7 +74,7 @@ export const NoteEditor = ({ open, onOpenChange, itemId, currentNote = '', onNot
               Cancel
             </Button>
             <Button type="submit" variant="outline">
-              Save Note
+              Save note
             </Button>
           </div>
         </form>

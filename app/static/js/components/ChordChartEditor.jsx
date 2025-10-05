@@ -782,7 +782,7 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
       <div className="space-y-4">
         {/* Chord Name field */}
         <div>
-          <div className="text-sm text-blue-400 mb-1">Chord Name</div>
+          <div className="text-sm text-blue-400 mb-1">Chord name</div>
           <div className="relative">
             <Input
               value={title}
@@ -915,7 +915,7 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
                 : 'bg-black hover:bg-gray-800 text-gray-300 border border-gray-600'
             }`}
           >
-            Edit Dots
+            Edit dots
           </Button>
           <Button
             variant={editMode === 'fingers' ? 'default' : 'outline'}
@@ -928,7 +928,7 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
                 : '!bg-black hover:!bg-gray-800 !text-gray-300 !border !border-gray-600'
             }`}
           >
-            Edit Fingers
+            Edit fingers
           </Button>
           <Button
             variant={editMode === 'barres' ? 'default' : 'outline'}
@@ -939,21 +939,21 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
                 : '!bg-black hover:!bg-gray-800 !text-gray-300 !border !border-gray-600'
             }`}
           >
-            Edit Barres
+            Edit barres
           </Button>
         </div>
 
         {/* Mode-specific instructions */}
         {editMode === 'barres' && (
           <div className="bg-green-900 bg-opacity-50 border border-green-600 rounded-lg p-3 text-sm text-green-200">
-            <div className="font-semibold mb-1">Barre Mode Instructions:</div>
+            <div className="font-semibold mb-1">Barre mode instructions:</div>
             <div>Click on any fret to add/remove a full barre across all strings at that fret. Perfect for chords like F, B, F#m, etc.</div>
           </div>
         )}
         
         {editMode === 'fingers' && (
           <div className="bg-blue-900 bg-opacity-50 border border-blue-600 rounded-lg p-3 text-sm text-blue-200">
-            <div className="font-semibold mb-1">Finger Numbers Mode Instructions:</div>
+            <div className="font-semibold mb-1">Finger numbers mode instructions:</div>
             <div>Click on a finger position, then press 1-5 keys to assign finger numbers (5 = thumb). Press Escape to cancel selection.</div>
             {selectedFinger && (
               <div className="mt-2 text-yellow-300">
@@ -1012,7 +1012,7 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
             className={`flex-1 ${title.trim() ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
             disabled={!title.trim()}
           >
-            {editingChordId ? 'Update Chord Chart' : 'Add Chord Chart'}
+            {editingChordId ? 'Update chord chart' : 'Add chord chart'}
           </Button>
           
           {onCancel && (

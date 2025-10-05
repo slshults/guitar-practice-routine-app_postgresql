@@ -225,7 +225,7 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
       <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle>
-            {routine ? `Edit Routine: ${routine.name}` : 'Create New Routine'}
+            {routine ? `Edit routine: ${routine.name}` : 'Create new routine'}
           </DialogTitle>
           <DialogDescription>
             Add or remove items and arrange them in your preferred order
@@ -241,7 +241,7 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
           {/* Selected Items */}
           <Card className="w-1/2 bg-gray-900">
             <CardHeader>
-              <CardTitle>Selected Items</CardTitle>
+              <CardTitle>Selected items</CardTitle>
               {!routine?.name && (
                 <Input
                   placeholder="Enter routine name..."
@@ -279,7 +279,7 @@ export const RoutineEditor = ({ open, onOpenChange, routine = null, onRoutineCha
           {/* Available Items */}
           <Card className="w-1/2 bg-gray-900">
             <CardHeader>
-              <CardTitle>Available Items</CardTitle>
+              <CardTitle>Available items</CardTitle>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
                 <Input

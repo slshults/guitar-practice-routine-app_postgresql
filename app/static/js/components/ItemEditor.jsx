@@ -146,7 +146,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
       <DialogContent className="max-w-2xl bg-gray-800">
         <DialogHeader>
           <DialogTitle>
-            {item ? `Edit Item: ${item['C']}` : 'Create New Item'}
+            {item ? `Edit item: ${item['C']}` : 'Create new item'}
           </DialogTitle>
           <DialogDescription>
             Edit the details of your practice item
@@ -189,7 +189,7 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
           {/* Songbook folder field - only show on desktop platforms */}
           {supportsFolderOpening() && (
             <div className="space-y-2">
-              <Label htmlFor="songbook">Songbook Folder</Label>
+              <Label htmlFor="songbook">Songbook folder</Label>
               <Input
                 id="songbook"
                 value={formData['F']}
@@ -302,7 +302,7 @@ export const BulkSongbookUpdate = ({ onComplete }) => {
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Bulk Update Songbook Paths</p>
+            <p>Bulk update songbook paths</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -310,7 +310,7 @@ export const BulkSongbookUpdate = ({ onComplete }) => {
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-2xl bg-gray-800">
           <DialogHeader>
-            <DialogTitle>Bulk Update Songbook Paths</DialogTitle>
+            <DialogTitle>Bulk update songbook paths</DialogTitle>
             <DialogDescription>
               Paste your folder paths, one per line
             </DialogDescription>
@@ -318,7 +318,7 @@ export const BulkSongbookUpdate = ({ onComplete }) => {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="paths">Folder Paths</Label>
+              <Label htmlFor="paths">Folder paths</Label>
               <Textarea
                 id="paths"
                 value={paths}
@@ -356,7 +356,7 @@ export const BulkSongbookUpdate = ({ onComplete }) => {
                     Updating...
                   </>
                 ) : (
-                  'Update Paths'
+                  'Update paths'
                 )}
               </Button>
             </div>

@@ -644,7 +644,7 @@ const RoutinesPage = () => {
         {/* Active Routine Section */}
         <Card className="bg-gray-900 text-gray-100">
           <CardHeader>
-            <CardTitle>Current Active Routine</CardTitle>
+            <CardTitle>Current active routine</CardTitle>
           </CardHeader>
           <CardContent>
             {isAuthenticated ? (
@@ -721,7 +721,7 @@ const RoutinesPage = () => {
         {/* Inactive Routines Section */}
         <Card className="bg-gray-900 text-gray-100">
           <CardHeader>
-            <CardTitle>Inactive Routines</CardTitle>
+            <CardTitle>Inactive routines</CardTitle>
           </CardHeader>
           <CardContent>
             {isAuthenticated ? (
@@ -730,11 +730,11 @@ const RoutinesPage = () => {
                 <div className="space-y-2">
                   <div className="mb-4 flex space-x-2">
                     <label htmlFor="new-routine-name-input" className="sr-only">
-                      New Routine Name
+                      New routine name
                     </label>
                     <Input
                       id="new-routine-name-input"
-                      placeholder="New Routine Name"
+                      placeholder="New routine name"
                       value={newRoutineName}
                       onChange={(e) => setNewRoutineName(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleCreateRoutine()}
@@ -789,7 +789,7 @@ const RoutinesPage = () => {
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete Routine</AlertDialogTitle>
+              <AlertDialogTitle>Delete routine</AlertDialogTitle>
               <AlertDialogDescription>
                 Are you sure you want to delete "{routineToDelete?.name}"? This action cannot be undone.
               </AlertDialogDescription>

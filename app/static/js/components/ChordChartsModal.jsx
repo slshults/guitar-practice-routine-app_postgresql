@@ -1880,7 +1880,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                                   {/* Column 1: File Upload */}
                                   <div className="flex flex-col">
                                     <div className="text-center mb-2">
-                                      <p className="text-gray-400 text-sm font-medium">Upload Files</p>
+                                      <p className="text-gray-400 text-sm font-medium">Upload files</p>
                                     </div>
                                     <div
                                       className={`flex-1 p-4 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${
@@ -1948,7 +1948,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                                   {/* Column 2: YouTube URL */}
                                   <div className="flex flex-col">
                                     <div className="text-center mb-2">
-                                      <p className="text-gray-400 text-sm font-medium">YouTube Guitar Lesson</p>
+                                      <p className="text-gray-400 text-sm font-medium">YouTube guitar lesson</p>
                                     </div>
                                     <div className="flex-1 flex flex-col justify-center">
                                       <input
@@ -1971,7 +1971,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                                   {/* Column 3: Manual Chord Input */}
                                   <div className="flex flex-col">
                                     <div className="text-center mb-2">
-                                      <p className="text-gray-400 text-sm font-medium">Manual Entry</p>
+                                      <p className="text-gray-400 text-sm font-medium">Manual entry</p>
                                     </div>
                                     <div className="flex-1 flex flex-col justify-center relative">
                                       <textarea
@@ -2216,7 +2216,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                     }}
                     className="min-w-48"
                   >
-                    + Add New Chord
+                    + Add new chord
                   </Button>
                 </div>
 
@@ -2226,7 +2226,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                     onClick={() => addNewSection(itemReferenceId)}
                     className="min-w-48"
                   >
-                    + Add New Section
+                    + Add new section
                   </Button>
                 </div>
 
@@ -2342,7 +2342,7 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
                   onClick={handleDeleteExistingCharts}
                   className="bg-orange-500 hover:bg-orange-600 text-white border-orange-500 shadow-lg font-medium"
                 >
-                  Delete All & Autocreate
+                  Delete all & autocreate
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>

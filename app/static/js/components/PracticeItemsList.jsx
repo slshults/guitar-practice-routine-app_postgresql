@@ -233,7 +233,7 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
     <>
       <Card className="w-full max-w-4xl mx-auto bg-gray-900 text-gray-100">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-2xl">Practice Items</CardTitle>
+          <CardTitle className="text-2xl">Practice items</CardTitle>
           <div className="flex items-center space-x-2">
             <Button
               className="bg-blue-600 hover:bg-blue-700 text-lg px-4 py-6"
@@ -243,7 +243,7 @@ export const PracticeItemsList = ({ items = [], onItemsChange }) => {
               }}
             >
               <Plus className="mr-2 h-5 w-5" aria-hidden="true" />
-              Add Item
+              Add item
             </Button>
             <BulkSongbookUpdate onComplete={onItemsChange} />
           </div>

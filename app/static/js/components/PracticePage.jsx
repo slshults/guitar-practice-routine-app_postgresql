@@ -3404,7 +3404,7 @@ export const PracticePage = () => {
                         )}
                         <h3 className="text-xl text-gray-300 flex items-center" id={`chord-charts-title-${routineItem['A']}`}>
                           <Music className="h-5 w-5 mr-2" aria-hidden="true" />
-                          Chord Charts
+                          Chord charts
                         </h3>
                       </div>
                     </div>
@@ -3603,7 +3603,7 @@ export const PracticePage = () => {
                                             className="max-w-md bg-gray-700 text-gray-300 hover:bg-gray-600 mb-2 flex items-center justify-center"
                                           >
                                             <Upload className="h-4 w-4 mr-2" />
-                                            Autocreate Chord Charts
+                                            Autocreate chord charts
                                           </Button>
                                         </div>
                                       )}
@@ -3623,7 +3623,7 @@ export const PracticePage = () => {
                                                 {/* Column 1: File Upload */}
                                                 <div className="flex flex-col">
                                                   <div className="text-center mb-2">
-                                                    <p className="text-gray-400 text-sm font-medium">Upload Files</p>
+                                                    <p className="text-gray-400 text-sm font-medium">Upload files</p>
                                                   </div>
                                                   <div
                                                     className={`flex-1 p-4 border-2 border-dashed rounded-lg transition-colors cursor-pointer ${
@@ -3691,7 +3691,7 @@ export const PracticePage = () => {
                                                 {/* Column 2: YouTube URL */}
                                                 <div className="flex flex-col">
                                                   <div className="text-center mb-2">
-                                                    <p className="text-gray-400 text-sm font-medium">YouTube Guitar Lesson</p>
+                                                    <p className="text-gray-400 text-sm font-medium">YouTube guitar lesson</p>
                                                   </div>
                                                   <div className="flex-1 flex flex-col justify-center">
                                                     <input
@@ -3714,7 +3714,7 @@ export const PracticePage = () => {
                                                 {/* Column 3: Manual Chord Input */}
                                                 <div className="flex flex-col">
                                                   <div className="text-center mb-2">
-                                                    <p className="text-gray-400 text-sm font-medium">Manual Entry</p>
+                                                    <p className="text-gray-400 text-sm font-medium">Manual entry</p>
                                                   </div>
                                                   <div className="flex-1 flex flex-col justify-center relative">
                                                     <textarea
@@ -3763,7 +3763,7 @@ export const PracticePage = () => {
                                               className="px-6"
                                             >
                                               <Wand className="h-4 w-4 mr-2" />
-                                              Create Chord Charts
+                                              Create chord charts
                                             </Button>
                                           </div>
                                             </>
@@ -3959,7 +3959,7 @@ export const PracticePage = () => {
                                   }}
                                   className="min-w-48"
                                 >
-                                  + Add New Chord
+                                  + Add new chord
                                 </Button>
                               </div>
 
@@ -3969,7 +3969,7 @@ export const PracticePage = () => {
                                   onClick={() => addNewSection(itemReferenceId)}
                                   className="min-w-48"
                                 >
-                                  + Add New Section
+                                  + Add new section
                                 </Button>
                               </div>
 
@@ -4161,7 +4161,7 @@ export const PracticePage = () => {
             ) : !showOverwriteConfirmation ? (
               <>
                 <h2 className="text-xl font-bold text-white mb-4">
-                  Copy Chord Charts
+                  Copy chord charts
                 </h2>
                 
                 <p className="text-gray-300 mb-2">
@@ -4293,7 +4293,7 @@ export const PracticePage = () => {
             onWheel={(e) => e.stopPropagation()}
           >
             <h2 className="text-xl font-bold text-white mb-4">
-              Copy Chord Charts From Other Song
+              Copy chord charts from other song
             </h2>
 
             <p className="text-gray-300 mb-2">
@@ -4348,7 +4348,7 @@ export const PracticePage = () => {
                 disabled={!selectedSourceItem}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Copy Chord Charts
+                Copy chord charts
               </Button>
             </div>
           </div>
@@ -4361,7 +4361,7 @@ export const PracticePage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center space-x-2">
               <AlertTriangle className="h-5 w-5 text-orange-500" />
-              <span>Replace Existing Chord Charts</span>
+              <span>Replace existing chord charts</span>
             </AlertDialogTitle>
             <AlertDialogDescription>
               This song already has chord charts. To use autocreate, all existing chord charts must be deleted first. 
@@ -4379,7 +4379,7 @@ export const PracticePage = () => {
               onClick={handleDeleteExistingCharts}
               className="bg-orange-500 hover:bg-orange-600 text-white border-orange-500 shadow-lg font-medium"
             >
-              Delete All & Autocreate
+              Delete all & autocreate
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -4409,7 +4409,7 @@ export const PracticePage = () => {
               onClick={() => handleMixedContentChoice('chord_charts')}
               className="w-full p-4 bg-slate-700 hover:bg-slate-600 text-white"
             >
-              Import Chord Charts
+              Import chord charts
             </AlertDialogAction>
           </div>
           <AlertDialogFooter>
