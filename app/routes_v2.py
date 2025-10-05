@@ -1907,11 +1907,11 @@ Thanks so much for being thorough with this, you rock Claude! 🤘🎸🚀"""
                     }
                 })
 
-        # Use Opus 4.1 for superior visual analysis of chord diagrams
-        app.logger.info("Using Opus 4.1 for chord chart visual analysis")
+        # Use Sonnet 4.5 for visual analysis of chord diagrams
+        app.logger.info("Using Sonnet 4.5 for chord chart visual analysis")
         llm_start_time = time.time()
         response = client.messages.create(
-            model="claude-opus-4-1-20250805",
+            model="claude-sonnet-4-5-20250929",
             max_tokens=6000,
             messages=[{
                 "role": "user",
@@ -1925,7 +1925,7 @@ Thanks so much for being thorough with this, you rock Claude! 🤘🎸🚀"""
         # Track LLM generation with PostHog Analytics
         from app.utils.llm_analytics import llm_analytics
         llm_analytics.track_generation(
-            model="claude-opus-4-1-20250805",
+            model="claude-sonnet-4-5-20250929",
             input_messages=[{"role": "user", "content": "Chord chart processing and analysis"}],
             output_choices=[{"message": {"content": response_text}}],
             usage={

@@ -6,50 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Using the Task Tool for Implementation Work
 
-#### Division of Responsibilities
-
-This is IMPORTANT for managing rate-limiting and billing efficiency. **Sonnet 4 should be the default model** since Task tool calls are billed under the calling model's usage:
-
-**Sonnet 4 Role** claude-sonnet-4-20250514 (Default & Implementation):
-- File editing and code changes
-- Direct implementation of planned features
-- Routine refactoring and code updates
-- Following established patterns and conventions
-- Executing well-defined tasks with clear requirements
-- Basic debugging and troubleshooting
-- Most day-to-day development work
-
-**Opus 4.1 Role** claude-opus-4-1-20250805 (Complex Analysis via Task Tool):
-- Complex analysis and architectural decisions
-- Multi-file code investigation and understanding
-- Task planning and breaking down requirements
-- Code review and verification of implementations
-- Handling complex debugging and system-level issues
-- Multi-system reasoning and integration problems
-
 #### When to Use the Task Tool
 
-**Sonnet should delegate to Opus for:**
+**Delegate to subagents for:**
 - Initial codebase exploration and analysis
 - Complex architectural decisions
-- Multi-system debugging
-- Planning and requirement analysis
+- Multi-system debugging and troubleshooting
+- Multi-step Playwright testing workflows
 - Tasks requiring deep reasoning about system interactions
+- Token-heavy operations (file searching, multi-file investigation)
 - Complex refactoring that affects multiple files/systems
 
-**Sonnet should handle directly:**
+**Handle directly in main conversation:**
 - Making edits to existing files
 - Implementing features with clear requirements
 - Following established patterns (e.g., adding new API endpoints)
 - Routine code updates and maintenance tasks
 - Straightforward bug fixes and improvements
+- Single-file changes with minimal investigation
 
 #### Best Practices
 
 1. **Clear Task Definitions**: When using the Task tool, provide specific, actionable instructions
 2. **Context Preservation**: Include relevant file paths, function names, and implementation details
-3. **Pattern References**: Point Sonnet to existing examples in the codebase to follow
+3. **Pattern References**: Point to existing examples in the codebase to follow
 4. **Success Criteria**: Define what "done" looks like for the delegated task
+5. **Token Management**: Delegate tasks that would consume >20k tokens to preserve main context
 
 #### Subagent Opportunities in This Project
 
@@ -207,9 +189,7 @@ Ab Bm Ebsus2 Cmin
   - Add `"mcp__playwright__*"` to the `permissions.allow` array in `.claude/settings.local.json` (project-level)
   - Alternatively, add to `~/.claude/settings.json` (user-level, applies to all projects)
   - Format: `"permissions": { "allow": ["mcp__playwright__*"], "deny": [] }`
-  - **IMPORTANT**: Use Claude Code in **terminal mode** (within VS Code) instead of the native extension
-  - In terminal mode, click "Always allow this tool" on first approval - subsequent actions run without prompts
-  - **Note**: As of 10/02/2025, the VS Code native extension requires per-action approval despite configuration. Terminal mode is the recommended workflow for automated testing.
+  - Click "Always allow this tool" on first approval - subsequent actions run without prompts
 
 #### Navigation Patterns
 
@@ -354,10 +334,6 @@ mcp__playwright__browser_console_messages(onlyErrors=true)
 - Take screenshot to see if error message displayed
 - Check browser network requests for failed API calls
 
-**Approval Prompts Slow Down Testing:**
-- As of 10/02/2025, per-action approval may still be required
-- Future versions may support bulk approval
-- Be patient and approve each action when prompted
 
 ## Architecture
 
@@ -644,12 +620,12 @@ if ocr_result and should_use_ocr_result(ocr_result, minimum_chords=2):
 - **CRITICAL PROMPT FIX**: Visual analysis prompt must NOT assume alternate tuning - let Claude determine tuning naturally
 - **Anti-knowledge instruction**: Explicitly tell Claude "NEVER use your knowledge of chord shapes - only extract what you visually observe"
 
-#### Hybrid Model Approach (NEW)
-**Smart Model Selection** for optimal cost/performance balance:
-- **Opus 4.1**: Used automatically when reference chord diagrams are present (superior visual analysis)
-- **Sonnet 4**: Used for tablature-only processing (cost-effective for text analysis)
-- **Detection Logic**: System checks file categories and selects appropriate model
-- **Rate Limit Management**: Helps us stay within Opus usage limits while getting best results
+#### Model Architecture (UPDATED)
+**Unified Sonnet 4.5 approach** for all autocreate processing:
+- **Sonnet 4.5**: Used for all visual analysis, chord chart processing, and text analysis
+- **Superior vision**: Sonnet 4.5's improved vision capabilities handle all chord diagram analysis
+- **Cost efficiency**: Single model for all processing paths simplifies architecture
+- **Performance**: Faster and more cost-effective than previous multi-model approach
 
 ## PostgreSQL Migration Troubleshooting Patterns
 
