@@ -263,8 +263,8 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
         </button>
       )}
       
-      <div className="relative w-full h-36 mx-auto flex items-center justify-center overflow-hidden">
-        <div 
+      <div className="relative mx-auto flex items-center justify-center overflow-hidden" style={{width: '180px', height: '192px'}}>
+        <div
           ref={chartRef}
           className="w-full h-full"
         >
@@ -3616,12 +3616,7 @@ export const PracticePage = () => {
                                   return chordRows.map((row, rowIndex) => (
                                     <div
                                       key={rowIndex}
-                                      className="grid grid-cols-5 gap-2"
-                                      style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(5, 1fr)',
-                                        gap: '0.5rem'
-                                      }}
+                                      className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2"
                                     >
                                       {row.map(chart => (
                                         <MemoizedChordChart

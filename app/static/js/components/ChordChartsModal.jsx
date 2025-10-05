@@ -269,7 +269,7 @@ const MemoizedChordChart = memo(({ chart, onEdit, onDelete, onInsertAfter }) => 
         </button>
 
         {/* Chord diagram container using SVGuitar (copied sizing from PracticePage) */}
-        <div className="relative w-full h-36 mx-auto flex items-center justify-center overflow-hidden">
+        <div className="relative w-40 mx-auto flex items-center justify-center overflow-hidden" style={{height: '230px'}}>
           <div
             ref={chartRef}
             className="w-full h-full"
