@@ -634,12 +634,31 @@ def routines():
     if request.method == 'GET':
         return jsonify(data_layer.get_all_routines())
     elif request.method == 'POST':
-        if not request.is_json:
-            return jsonify({"error": "Request must be JSON"}), 400
-            
-        new_routine = request.json
-        result = data_layer.create_routine(new_routine)
-        return jsonify(result)
+        try:
+            if not request.is_json:
+                return jsonify({"error": "Request must be JSON"}), 400
+
+            # Extract routine name from frontend format
+            routine_name = request.json.get('routineName')
+            if not routine_name:
+                return jsonify({"error": "Routine name is required"}), 400
+
+            app.logger.info(f"Creating routine with name: {routine_name}")
+
+            # Transform to sheets format for data layer
+            # Note: No 'A' field (ID) for new routines - let database auto-generate
+            sheets_format = {
+                'B': routine_name,  # Column B = Routine Name
+                'D': 0              # Column D = order (start at 0 for new routines)
+            }
+
+            app.logger.info(f"Calling data_layer.create_routine with: {sheets_format}")
+            result = data_layer.create_routine(sheets_format)
+            app.logger.info(f"Routine created successfully: {result}")
+            return jsonify(result)
+        except Exception as e:
+            app.logger.error(f"Error creating routine: {str(e)}", exc_info=True)
+            return jsonify({"error": str(e)}), 500
 
 @app.route('/api/routines/<int:routine_id>', methods=['GET', 'PUT', 'DELETE'])
 def routine(routine_id):
