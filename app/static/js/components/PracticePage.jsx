@@ -3409,35 +3409,35 @@ export const PracticePage = () => {
                   </span>
                 </div>
                 <div className="flex items-center space-x-4">
-                  {(itemDetails?.['E'] || isExpanded) && (  // Show timer if duration available or item is expanded
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-gray-400"
-                        onClick={(e) => toggleTimer(routineItem['A'], e)}
-                      >
-                        {activeTimers.has(routineItem['A']) ? (
-                          <PauseIcon className="h-5 w-5" />
-                        ) : (
-                          <PlayIcon className="h-5 w-5" />
-                        )}
-                      </Button>
-                      
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-gray-400"
-                        onClick={(e) => resetTimer(routineItem['A'], e)}
-                      >
-                        <ResetIcon className="h-5 w-5" />
-                      </Button>
-                      
-                      <span className="text-lg font-mono">
-                        {formatTime(timerValue)}
-                      </span>
-                    </div>
-                  )}
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400"
+                      onClick={(e) => toggleTimer(routineItem['A'], e)}
+                      title={activeTimers.has(routineItem['A']) ? "Pause timer" : "Start timer"}
+                    >
+                      {activeTimers.has(routineItem['A']) ? (
+                        <PauseIcon className="h-5 w-5" />
+                      ) : (
+                        <PlayIcon className="h-5 w-5" />
+                      )}
+                    </Button>
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-400"
+                      onClick={(e) => resetTimer(routineItem['A'], e)}
+                      title="Reset timer"
+                    >
+                      <ResetIcon className="h-5 w-5" />
+                    </Button>
+
+                    <span className="text-lg font-mono" title="Time remaining">
+                      {formatTime(timerValue)}
+                    </span>
+                  </div>
                 </div>
               </div>
               {isExpanded && (
