@@ -30,13 +30,13 @@ This version uses PostgreSQL as the database backend.
 - **Local songbook folder links** - quick access to files on your local from links in the app
 
 ### Optional auto-creation of chord charts with help from Claude AI
-- **Autocreate chord charts** from lyrics sheets with chord names, existing chord charts, or YouTube lesson URLs
+- **Autocreate chord charts** from lyrics sheets with chord names, existing chord charts, or YouTube lesson URLs (using Sonnet 4.5)
 - **Three processing paths**: Visual chord diagrams, chord names above lyrics, and tablature notation
-- **Smart model selection** - optimized for accuracy and cost efficiency. local OCR is used to pull info from lyrics sheets with chord names and send it ot Sonnet 4 to pull the chords from a the DB. chord charts visually analyzed by Opus 4.1 who sends the results to Sonnet 4 for chord chart creation 
-- **Optional feature** - requires Anthropic API key
+- **It's not all AI** - Using local OCR to pull section names and chord names from lyrics sheets with chord names, sending that to Claude for chord chart creation. (Visual analysis of uploaded chord charts is handled by Claude though) 
+- **Autocreate is Optional** - Hate AI? Then don't enter an Anthropic API key, and the app won't use AI at all.
 
 ### Track your practice time, in-depth
-- **PostHog analytics built-in** - optional practice history tracking via PostHog. Works with the free level, project API key required. 
+- **PostHog analytics built-in** - Optional practice history tracking via PostHog. Works with the free level, project API key required. 
 
 # Getting Started
 
