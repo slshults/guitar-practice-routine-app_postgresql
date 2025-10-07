@@ -87,7 +87,7 @@ const ResetIcon = ({ className }) => (
 // Format seconds to MM:SS
 const formatTime = (seconds) => {
   const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 };
 
@@ -1443,10 +1443,20 @@ export const PracticePage = () => {
     });
   };
 
-  const toggleTimer = (itemId, e) => {
+  const toggleTimer = async (itemId, e) => {
     e?.stopPropagation(); // Prevent expand/collapse when clicking timer
     const routineItem = routine.items.find(item => item['A'] === itemId);  // Column A is ID
     if (routineItem) {
+      // Resume AudioContext on first user interaction (required for browser autoplay policies)
+      if (audioContext.current && audioContext.current.state === 'suspended') {
+        try {
+          await audioContext.current.resume();
+          console.log('[AUDIO] AudioContext resumed after user interaction');
+        } catch (error) {
+          console.error('[AUDIO] Failed to resume AudioContext:', error);
+        }
+      }
+
       // Stop any playing sound when timer controls are used
       if (timerSound.current) {
         timerSound.current.stop();
@@ -1570,8 +1580,19 @@ export const PracticePage = () => {
     }
   };
 
-  const resetTimer = (itemId, e) => {
+  const resetTimer = async (itemId, e) => {
     e?.stopPropagation();
+
+    // Resume AudioContext on user interaction (required for browser autoplay policies)
+    if (audioContext.current && audioContext.current.state === 'suspended') {
+      try {
+        await audioContext.current.resume();
+        console.log('[AUDIO] AudioContext resumed after user interaction');
+      } catch (error) {
+        console.error('[AUDIO] Failed to resume AudioContext:', error);
+      }
+    }
+
     // Stop any playing sound when timer is reset
     if (timerSound.current) {
       timerSound.current.stop();

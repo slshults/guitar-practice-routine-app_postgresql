@@ -46,7 +46,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Claude 4 Prompt Engineering Best Practices
 
 #### Multi-Context Window Workflows
-When the context-window remaining gets down to 12%, or when your tasks for your next turn would be likely to drop the remaining window below 12%, then save your current progress and state to memory before the context window refreshes. Use as much of the remaining context window as possible before saving, and let me know how much of the context window is remaining at that time.
+When the context-window remaining gets down to 25%, or when your tasks for your next turn would be likely to drop the remaining window below 25%, then save your current progress and state to memory before the context window refreshes. Write a handoff summary for your future self, and let me know how much of the context window is remaining at that time. (This is VITAL to avoid having our conversation autocompacted, which happens at 22.5% remaining. Autocompacting is... not good yet, so we want to avoid it.)
 
 #### State Management Best Practices
 - After completing a task that involves tool use, provide a quick summary of the work you've done
@@ -172,7 +172,9 @@ Ab Bm Ebsus2 Cmin
 
 #### Token Efficiency Best Practices
 
-**CRITICAL**: Playwright MCP snapshots consume 5k-15k tokens each. Pattern: ONE snapshot (get refs) → ALL actions → ONE screenshot (verify). Delegate multi-step tests (3+ actions) to Task tool with general-purpose agent to preserve main conversation context.
+**CRITICAL**: Playwright MCP snapshots consume 5k-15k tokens each. Pattern: Screenshot → ALL actions → ONE screenshot (verify). If the first screenshot doesn't reveal enough for navigation, then take ONE snapshot and repeat the pattern with only screenshots from there.
+
+Delegate multi-step tests (3+ actions) to Task tool with general-purpose agent to preserve main conversation context window remaining.
 
 #### Wait Time Expectations
 

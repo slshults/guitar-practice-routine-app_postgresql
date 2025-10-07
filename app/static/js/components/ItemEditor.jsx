@@ -34,22 +34,37 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
 
   // Clear error and load item data when modal opens
   useEffect(() => {
-    if (open && item) {
-      // If we have a complete item (with all fields), use it directly
-      if (item['D'] !== undefined || item['H'] !== undefined) {
+    if (open) {
+      if (item) {
+        // Editing existing item
+        // If we have a complete item (with all fields), use it directly
+        if (item['D'] !== undefined || item['H'] !== undefined) {
+          setFormData({
+            'C': item['C'] || '',
+            'D': item['D'] || '',
+            'E': item['E'] || 5,
+            'F': item['F'] || '',
+            'G': item['G'] || '',
+            'H': item['H'] || '',
+          });
+          setError(null);
+          setIsDirty(false);
+        } else {
+          // We have a lightweight item (only ID and Title), need to fetch full data
+          fetchFullItemData(item['A']);
+        }
+      } else {
+        // Creating new item - reset to defaults
         setFormData({
-          'C': item['C'] || '',
-          'D': item['D'] || '',
-          'E': item['E'] || 5,
-          'F': item['F'] || '',
-          'G': item['G'] || '',
-          'H': item['H'] || '',
+          'C': '',
+          'D': '',
+          'E': 5,
+          'F': '',
+          'G': '',
+          'H': '',
         });
         setError(null);
         setIsDirty(false);
-      } else {
-        // We have a lightweight item (only ID and Title), need to fetch full data
-        fetchFullItemData(item['A']);
       }
     }
   }, [open, item]);
@@ -117,11 +132,10 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
         trackItemOperation('updated', 'item', itemName);
         
         // Track specific content updates if this is an edit
-        const originalTitle = item?.['C'] || '';
         const originalNotes = item?.['D'] || '';
         const originalTuning = item?.['H'] || '';
         const originalSongbook = item?.['I'] || '';
-        
+
         if (formData['D'] && formData['D'] !== originalNotes) {
           trackContentUpdate('notes', itemName);
         }
@@ -173,17 +187,83 @@ export const ItemEditor = ({ open, onOpenChange, item = null, onItemChange }) =>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="duration">Duration (minutes)</Label>
-            <Input
-              id="duration"
-              type="number"
-              min="1"
-              value={formData['E']}
-              onChange={(e) => handleFormChange('E', parseInt(e.target.value) || 5)}
-              required
-              className="bg-gray-900 text-white"
-              autoComplete="off"
-            />
+            <Label htmlFor="duration">Duration</Label>
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <Input
+                  id="duration-minutes"
+                  type="number"
+                  min="0"
+                  max="999"
+                  value={Math.floor(formData['E'])}
+                  onChange={(e) => {
+                    const mins = parseInt(e.target.value) || 0;
+                    const secs = (formData['E'] % 1) * 60;
+                    handleFormChange('E', mins + (secs / 60));
+                  }}
+                  onInput={(e) => {
+                    const mins = parseInt(e.target.value) || 0;
+                    const secs = (formData['E'] % 1) * 60;
+                    handleFormChange('E', mins + (secs / 60));
+                  }}
+                  className="bg-gray-900 text-white text-center"
+                  autoComplete="off"
+                  placeholder="0"
+                />
+                <div className="text-xs text-gray-400 text-center mt-1">minutes</div>
+              </div>
+              <span className="text-xl text-gray-400">:</span>
+              <div className="flex-1">
+                <div className="relative">
+                  <Input
+                    id="duration-seconds"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={Math.round((formData['E'] % 1) * 60)}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      const secs = Math.min(59, parseInt(value) || 0);
+                      const mins = Math.floor(formData['E']);
+                      handleFormChange('E', mins + (secs / 60));
+                    }}
+                    className="bg-gray-900 text-white text-center pr-6"
+                    autoComplete="off"
+                    placeholder="00"
+                  />
+                  <div className="absolute right-0 top-0 flex flex-col h-full border-l border-gray-700">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentSecs = Math.round((formData['E'] % 1) * 60);
+                        const newSecs = Math.min(59, currentSecs + 15);
+                        const mins = Math.floor(formData['E']);
+                        handleFormChange('E', mins + (newSecs / 60));
+                      }}
+                      className="flex-1 px-1 text-gray-400 hover:text-white hover:bg-gray-700 text-xs leading-none"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const currentSecs = Math.round((formData['E'] % 1) * 60);
+                        const newSecs = Math.max(0, currentSecs - 15);
+                        const mins = Math.floor(formData['E']);
+                        handleFormChange('E', mins + (newSecs / 60));
+                      }}
+                      className="flex-1 px-1 text-gray-400 hover:text-white hover:bg-gray-700 text-xs leading-none border-t border-gray-700"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </div>
+                <div className="text-xs text-gray-400 text-center mt-1">seconds</div>
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Total: {Math.floor(formData['E'])} min {Math.round((formData['E'] % 1) * 60)} sec
+            </div>
           </div>
 
           {/* Songbook folder field - only show on desktop platforms */}
