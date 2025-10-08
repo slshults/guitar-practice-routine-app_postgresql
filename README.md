@@ -42,6 +42,81 @@ If you'd prefer an ad-supported or paid version as a web app, it's coming soon!
 ### Track your practice time, in-depth
 - **PostHog analytics built-in** - Optional practice history tracking via PostHog. Works with the free level, project API key required. 
 
+## Screenshots
+*Click to enbiggen*
+#### Main Interface
+
+<table>
+<tr>
+<td width="25%">
+   <img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/765246ae-e275-43e7-ab81-e1024a83f6a2" />
+
+<br><em>Practice Page</em>
+</td>
+<td width="25%">
+   <img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/d19c4d7f-b56f-47bb-a9fa-b020b5626534" />
+
+<br><em>Routines Management</em>
+</td>
+<td width="25%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/e1ce67f7-5bb2-4d7e-98f5-d20171c582dd" />
+<br><em>Library/Songbook</em>
+</td>
+<td width="25%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/e54a3e8f-5841-41c3-bfc2-eba0055ef17d" />
+<br><em>Timer</em>
+</td>
+</tr>
+</table>
+
+#### Chord Chart Features
+
+<table>
+<tr>
+<td width="25%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/097cad6b-9239-4f91-ac7c-07e3e7385b2d" />
+<br><em>Type `C`, get a cowboy C</em>
+</td>
+<td width="25%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/cc2ea9f6-94b1-4607-857d-d65e653dc169" />
+<br><em>Autocreated chord charts from uploaded PDFs, YouTube URLs, or type your chord names</em>
+</td>
+<td width="25%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/7a3d6be6-a443-4a79-b05a-3437cf5d2c2d" />
+<br><em>Sections for verse, chorus etc</em>
+</td>
+</tr>
+</table>
+
+#### Editing & Management
+
+<table>
+<tr>
+<td width="33%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/3e2f861a-dc37-4ce7-8c55-6325e76d9f87" />
+
+<br><em>Create and edit items</em>
+</td>
+<td width="33%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/ecbd8116-2cb4-4902-ac28-b14347aecdea" />
+a
+<br><em>Edit routines</em>
+</td>
+<td width="33%">
+<img width="1139" height="914" alt="image" src="https://github.com/user-attachments/assets/1877f4b9-18cc-4b1e-bff3-3396405dff04" />
+<br><em>Copy chord charts between songs</em>
+</td>
+</tr>
+<tr>
+<td width="33%">
+<img width="1233" height="1130" alt="image" src="https://github.com/user-attachments/assets/b4492e08-b6c1-45d9-bbd0-c8d575fa788d" />
+<br><em>Run it locally</em>
+</td>
+<td width="33%"></td>
+<td width="33%"></td>
+</tr>
+</table>
+
 # Getting Started
 
 ### Prerequisites
