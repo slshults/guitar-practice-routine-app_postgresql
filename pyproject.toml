@@ -1,12 +1,8 @@
-[
-build-system
-]
+[build-system]
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
-[
-project
-]
+[project]
 name = "guitar-practice-assistant"
 version = "0.1.0"
 description = "A guitar practice routine manager"
@@ -16,6 +12,7 @@ authors = [
 requires-python = ">=3.10"
 dependencies = [
     "flask",
+    "python-dotenv",
     "google-auth",
     "google-auth-oauthlib",
     "google-auth-httplib2",
@@ -24,15 +21,14 @@ dependencies = [
     "python-magic",
     "pytesseract",
     "pdf2image",
-    "pillow"
+    "pillow",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "flask-cors"
 ]
 
-[
-tool.setuptools
-]
+[tool.setuptools]
 packages = ["app"]
 
-[
-tool.pylance
-]
+[tool.pylance]
 python.analysis.extraPaths = [".", "app"]
