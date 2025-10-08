@@ -3,7 +3,11 @@
 A web app for guitar players to manage practice routines, create chord charts, and track practice progress. 
 This version uses PostgreSQL as the database backend.
 
+## ⚠️ This is meant to be run on your local computer ONLY. Don't try host this on a server, because that would be a security nightmare. Seriously though: It's chock full of security holes if it's on the 'net. It's fine if it's running on your local. 
+
 **Note**: If you prefer a slower Google Sheets-based version (no local database required), check out the [original Google Sheets version](https://github.com/slshults/guitar-practice-routine-app_sheets).
+
+If you'd prefer an ad-supported or paid version as a web app, it's coming soon!
 
 ## Feature Highlights
 

@@ -338,13 +338,15 @@ def autocreate_chord_charts():
             """Helper function to process a single file"""
             if file.filename == '':
                 return None
-                
+
             # Validate file type and size
             from werkzeug.utils import secure_filename
+            import magic
+
             filename = secure_filename(file.filename)
             if not filename:
                 return None
-                
+
             # Check file size (5MB limit)
             file.seek(0, os.SEEK_END)
             file_size = file.tell()
@@ -352,20 +354,38 @@ def autocreate_chord_charts():
 
             if file_size > 5 * 1024 * 1024:  # 5MB
                 return {'error': f'File {filename} is too large (max 5MB)'}
-                
+
+            # Reject suspiciously small files (likely corrupt)
+            if file_size < 50:  # Less than 50 bytes is suspicious
+                return {'error': f'File {filename} is too small to be valid'}
+
             # Read file content
             file_data = file.read()
-            
-            # Determine file type
+
+            # Determine file type from extension
             file_ext = filename.lower().split('.')[-1] if '.' in filename else ''
-            
+
+            # Verify file type with magic number (file signature) to prevent extension spoofing
+            try:
+                mime_type = magic.from_buffer(file_data, mime=True)
+                app.logger.debug(f"File {filename} detected MIME type: {mime_type}")
+            except Exception as e:
+                app.logger.warning(f"Could not detect MIME type for {filename}: {e}")
+                # Continue with extension-based detection as fallback
+                mime_type = None
+
+            # Validate file type matches extension
             if file_ext == 'pdf':
+                if mime_type and mime_type != 'application/pdf':
+                    return {'error': f'File {filename} claims to be PDF but appears to be {mime_type}'}
                 return {
                     'name': filename,
                     'type': 'pdf',
                     'data': base64.b64encode(file_data).decode('utf-8')
                 }
             elif file_ext in ['png', 'jpg', 'jpeg']:
+                if mime_type and not mime_type.startswith('image/'):
+                    return {'error': f'File {filename} claims to be image but appears to be {mime_type}'}
                 return {
                     'name': filename,
                     'type': 'image',
@@ -373,6 +393,8 @@ def autocreate_chord_charts():
                     'media_type': f'image/{file_ext if file_ext != "jpg" else "jpeg"}'
                 }
             elif file_ext in ['txt'] or filename == 'youtube_transcript.txt':
+                if mime_type and not mime_type.startswith('text/'):
+                    return {'error': f'File {filename} claims to be text but appears to be {mime_type}'}
                 # Handle text files (including YouTube transcripts) as chord_names
                 return {
                     'name': filename,
@@ -435,10 +457,25 @@ def autocreate_chord_charts():
         app.logger.debug("Claude analysis complete, creating chord charts")
         
         return jsonify(analysis_result)
-        
+
     except Exception as e:
+        # Log full error details for debugging
+        import traceback
         app.logger.error(f"Error in autocreate chord charts: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+
+        # Return user-friendly error message (avoid exposing internals)
+        error_msg = "Failed to process chord charts. Please check the logs for details."
+
+        # Provide more specific guidance for common errors
+        if "Anthropic" in str(e) or "API" in str(e):
+            error_msg = "API connection error. Please check your ANTHROPIC_API_KEY in .env file."
+        elif "pdf2image" in str(e) or "pytesseract" in str(e):
+            error_msg = "Failed to process file. The file may be corrupt or in an unsupported format."
+        elif "rate_limit" in str(e).lower() or "429" in str(e):
+            error_msg = "API rate limit exceeded. Please wait a moment and try again."
+
+        return jsonify({'error': error_msg}), 500
 
 # System status and migration utilities
 @app.route('/api/system/status', methods=['GET'])

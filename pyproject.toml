@@ -17,10 +17,14 @@ requires-python = ">=3.10"
 dependencies = [
     "flask",
     "google-auth",
-    "google-auth-oauthlib", 
+    "google-auth-oauthlib",
     "google-auth-httplib2",
     "gspread",
-    "anthropic"
+    "anthropic",
+    "python-magic",
+    "pytesseract",
+    "pdf2image",
+    "pillow"
 ]
 
 [
