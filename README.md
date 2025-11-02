@@ -1,4 +1,4 @@
-# Guitar Practice Routine Assistant
+# Guitar Practice Routine App
 
 A web app for guitar players to manage practice routines, create chord charts, and track practice progress. 
 This version uses PostgreSQL as the database backend.
