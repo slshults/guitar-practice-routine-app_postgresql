@@ -938,6 +938,9 @@ export default function ChordChartsModal({ isOpen, onClose, itemId, itemTitle })
 
     } catch (error) {
       console.error('Error saving chord chart:', error);
+      // Re-throw so the editor keeps itself open and shows a visible error,
+      // instead of the failure being silently swallowed with no feedback.
+      throw error;
     }
   };
 

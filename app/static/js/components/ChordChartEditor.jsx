@@ -54,6 +54,19 @@ const fetchWithBackoff = async (url, options = {}, maxRetries = 3, onRetry = nul
   throw new Error(`Failed after ${maxRetries} attempts`);
 };
 
+// Hard cap on how long the chord-name loading state may stay active. Without this,
+// a slow or repeatedly rate-limited /chord-charts fetch could leave isLoadingChord
+// stuck true, permanently disabling the chord-name input and freezing the editor.
+const LOADING_TIMEOUT_MS = 15000;
+
+// Reject a promise if it doesn't settle within `ms`, so loading state can always
+// recover and re-enable the input with a clear error instead of hanging.
+const withTimeout = (promise, ms, timeoutMessage) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(timeoutMessage)), ms))
+  ]);
+
 export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = null, insertionContext = null, defaultTuning = 'EADGBE' }) => {
   const [title, setTitle] = useState('');
   const [startingFret, setStartingFret] = useState(1);
@@ -78,6 +91,9 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
   const [openStrings, setOpenStrings] = useState(new Set()); // Track open strings (0)
   const [mutedStrings, setMutedStrings] = useState(new Set()); // Track muted strings (x)
   const [isLoadingChord, setIsLoadingChord] = useState(false); // Loading state for API requests
+  const [loadError, setLoadError] = useState(null); // User-visible error when loading/autofill fails or times out
+  const [isSaving, setIsSaving] = useState(false); // In-flight state for the save (POST/PUT) request
+  const [saveError, setSaveError] = useState(null); // User-visible error when a save fails
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false); // Toggle for advanced settings
   const [selectedFinger, setSelectedFinger] = useState(null); // Track selected finger for number input [string, fret]
   const [addLineBreak, setAddLineBreak] = useState(false); // Whether to add line break after this chord
@@ -91,10 +107,11 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
   // Autofill function to copy existing chord fingerings
   const tryAutofill = async (chordName) => {
     if (!chordName.trim() || !itemId) return;
-    
+
+    setLoadError(null);
+    setIsLoadingChord(true);
     try {
-      setIsLoadingChord(true);
-      
+      await withTimeout((async () => {
       // Fetch existing chord charts for this item
       const response = await fetchWithBackoff(`/api/items/${itemId}/chord-charts`, {}, 3, 1000);
       if (!response.ok) {
@@ -194,9 +211,12 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
         // IMPORTANT: Never copy line break state during autofill - it's chord-specific, not shape-specific
         setAddLineBreak(false);
       }
-      
+      })(), LOADING_TIMEOUT_MS, 'Autofill request timed out');
     } catch (error) {
       console.error('Error during autofill:', error);
+      // Autofill is a convenience, not a requirement - surface it but let the user
+      // keep editing manually rather than leaving the input frozen.
+      setLoadError('Could not autofill this chord. You can still enter it manually.');
     } finally {
       setIsLoadingChord(false);
     }
@@ -206,9 +226,10 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
   useEffect(() => {
     if (editingChordId && itemId) {
       const loadChordForEditing = async () => {
+        setLoadError(null);
+        setIsLoadingChord(true);
         try {
-          setIsLoadingChord(true);
-          
+          await withTimeout((async () => {
           const response = await fetchWithBackoff(`/api/items/${itemId}/chord-charts`);
           if (response.ok) {
             const chords = await response.json();
@@ -269,9 +290,14 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
             }
           } else {
             console.error('Failed to fetch chord charts:', response.status);
+            throw new Error(`Failed to fetch chord charts: ${response.status}`);
           }
+          })(), LOADING_TIMEOUT_MS, 'Loading chord data timed out');
         } catch (error) {
           console.error('Error loading chord for editing:', error);
+          // Don't leave the input disabled forever - re-enable it and tell the
+          // user so they can still edit and save this chord manually.
+          setLoadError('Could not load this chord. You can still edit and save it below.');
         } finally {
           setIsLoadingChord(false);
         }
@@ -805,6 +831,9 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
               </div>
             )}
           </div>
+          {loadError && (
+            <p className="text-xs text-red-400 mt-1" role="alert">{loadError}</p>
+          )}
         </div>
 
         {/* Show more settings toggle */}
@@ -979,9 +1008,11 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
 
         {/* Action buttons */}
         <div className="flex gap-2">
-          <Button 
-            onClick={() => {
-              
+          <Button
+            onClick={async () => {
+              // Guard here too (not just via disabled) so a stray call can't submit a blank chord
+              if (!title.trim() || isSaving) return;
+
               const saveData = {
                 title,
                 startingFret,
@@ -1007,16 +1038,29 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
                 editingChordId
               });
 
-              onSave(saveData);
-            }} 
-            className={`flex-1 ${title.trim() ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
-            disabled={!title.trim()}
+              // Await the save so we can keep the editor open and show an error
+              // if it fails, instead of silently swallowing the failure.
+              setSaveError(null);
+              setIsSaving(true);
+              try {
+                await onSave(saveData);
+              } catch (error) {
+                console.error('Error saving chord chart:', error);
+                setSaveError('Could not save this chord chart. Please try again.');
+              } finally {
+                setIsSaving(false);
+              }
+            }}
+            className={`flex-1 ${title.trim() && !isSaving ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+            disabled={!title.trim() || isSaving}
           >
-            {editingChordId ? 'Update chord chart' : 'Add chord chart'}
+            {isSaving
+              ? 'Saving…'
+              : (editingChordId ? 'Update chord chart' : 'Add chord chart')}
           </Button>
-          
+
           {onCancel && (
-            <Button 
+            <Button
               onClick={onCancel}
               variant="outline"
               className="flex-1 border-gray-600 text-gray-300 hover:bg-gray-700"
@@ -1025,7 +1069,19 @@ export const ChordChartEditor = ({ itemId, onSave, onCancel, editingChordId = nu
             </Button>
           )}
         </div>
+
+        {/* Validation hint: explains why the save button is disabled */}
+        {!title.trim() && (
+          <p className="text-xs text-gray-400" role="note">
+            Enter a chord name to save this chord chart.
+          </p>
+        )}
+
+        {/* Surface save failures instead of silently closing/hanging */}
+        {saveError && (
+          <p className="text-sm text-red-400" role="alert">{saveError}</p>
+        )}
       </div>
     </div>
   );
-}; 
+};
